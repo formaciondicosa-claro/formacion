@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Formación DICO – Asistencia (Admin + Formador)</title>
+
+<!-- Supabase JS v2 -->
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<!-- XLSX (para Excel .xlsx). Si se bloquea, usa CSV. -->
+<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+:root{
+  --violeta:#a78bfa; --violeta-osc:#7c3aed;
+  --bg:#050617; --bg2:#111827; --card:#17182b;
+  --text:#e8e6ff; --muted:#bfbde6; --border-soft:rgba(167,139,250,.25);
+  --danger:#f97373; --success:#34d399; --warn:#facc15;
+}
+*{box-sizing:border-box;font-family:system-ui,Segoe UI,Roboto,sans-serif;}
+body{
+  margin:0;min-height:100vh;
+  background:radial-gradient(circle at top,var(--bg2),var(--bg));
+  color:var(--text);
+  display:flex;align-items:center;justify-content:center;
+  padding:16px;
+}
+.hidden{display:none!important;}
+.card{
+  width:100%;max-width:480px;
+  background:rgba(23,24,43,.85);
+  border:1px solid var(--border-soft);
+  border-radius:16px;
+  padding:22px;
+  box-shadow:0 20px 45px rgba(0,0,0,.55);
+}
+h1{margin:0 0 6px 0;color:var(--violeta);text-align:center;}
+p{margin:0 0 14px 0;color:var(--muted);text-align:center;font-size:14px;}
+label{display:block;margin-top:10px;color:var(--muted);font-size:12px;}
+input, select, textarea{
+  width:100%;
+  padding:12px;
+  margin-top:8px;
+  border-radius:10px;
+  border:1px solid var(--border-soft);
+  background:#0b0c1a;
+  color:var(--text);
+  font-size:14px;
+}
+input:focus, select:focus, textarea:focus{outline:none;border-color:var(--violeta);}
+button{
+  border:0;border-radius:10px;
+  padding:12px 14px;
+  background:var(--violeta);
+  color:#050617;font-weight:900;
+  cursor:pointer;
+}
+button:hover{background:var(--violeta-osc);}
+button:disabled{opacity:.55;cursor:not-allowed;}
+.badge{
+  display:inline-block;
+  padding:4px 10px;
+  border-radius:999px;
+  border:1px solid var(--border-soft);
+  color:var(--muted);
+  font-size:12px;
+}
+.small{font-size:12px;color:var(--muted);}
+.ok{color:var(--success);font-weight:800;}
+.err{color:var(--danger);font-weight:800;}
+.warn{color:var(--warn);font-weight:800;}
+
+.app{width:100%;max-width:1200px;}
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;margin-bottom:14px;flex-wrap:wrap;
+}
+.titleblock h2{margin:0;font-size:20px;}
+.titleblock .small{margin-top:2px;}
+.pillrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.grid{
+  display:grid;
+  grid-template-columns: 430px 1fr;
+  gap:14px;
+}
+@media (max-width: 980px){ .grid{grid-template-columns:1fr;} }
+.panel{
+  background:rgba(23,24,43,.75);
+  border:1px solid var(--border-soft);
+  border-radius:16px;
+  padding:14px;
+  box-shadow:0 18px 40px rgba(0,0,0,.4);
+}
+.panel h3{margin:0 0 10px 0;color:var(--violeta);}
+hr{border:0;border-top:1px solid var(--border-soft);margin:12px 0;}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.col{flex:1;min-width:160px;}
+.list{display:flex;flex-direction:column;gap:10px;}
+.item{
+  background:rgba(5,6,23,.35);
+  border:1px solid var(--border-soft);
+  border-radius:14px;
+  padding:12px;
+}
+.item b{color:var(--text);}
+.kv{display:grid;grid-template-columns: 140px 1fr;gap:6px;margin-top:6px;}
+.kv div{font-size:12px;color:var(--muted);}
+.kv div:nth-child(odd){color:rgba(191,189,230,.9);}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;}
+pre{
+  white-space:pre-wrap;
+  background:#0b0c1a;
+  border:1px solid var(--border-soft);
+  border-radius:12px;
+  padding:12px;
+  margin:10px 0 0 0;
+  color:var(--text);
+  font-size:12px;
+  overflow:auto;
+  max-height:260px;
+}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.chip{
+  border:1px solid var(--border-soft);
+  border-radius:999px;
+  padding:6px 10px;
+  font-size:12px;
+  color:var(--muted);
+  background:rgba(5,6,23,.25);
+}
+.daygrid{
+  display:grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap:8px;
+  margin-top:10px;
+}
+@media (max-width: 640px){ .daygrid{grid-template-columns: repeat(4, minmax(0, 1fr));} }
+.day{
+  display:flex;align-items:center;gap:8px;
+  padding:10px;border:1px solid var(--border-soft);
+  border-radius:12px;background:rgba(5,6,23,.25);
+  font-size:12px;
+}
+.day input{width:auto;margin:0;}
+.tablelike{
+  width:100%;
+  border:1px solid var(--border-soft);
+  border-radius:14px;
+  overflow:hidden;
+}
+.tablelike .tr{
+  display:grid;
+  grid-template-columns: 1fr 120px 120px;
+  gap:10px;
+  padding:10px 12px;
+  border-bottom:1px solid rgba(167,139,250,.18);
+}
+.tablelike .tr:last-child{border-bottom:0;}
+.tablelike .th{
+  background:rgba(5,6,23,.45);
+  color:var(--muted);
+  font-size:12px;
+  font-weight:800;
+}
+.btnMini{padding:10px 12px;border-radius:10px;font-weight:900;}
+.btnGhost{background:transparent;border:1px solid var(--border-soft);color:var(--text);}
+.btnGhost:hover{background:rgba(167,139,250,.10);}
+.btnDanger{background:transparent;border:1px solid rgba(248,113,113,.65);color:#ffd8d8;}
+.btnDanger:hover{border-color:rgba(248,113,113,1);}
+.btnOk{background:rgba(52,211,153,.95); color:#050617;}
+.btnBad{background:rgba(248,113,113,.95); color:#050617;}
+.btnOk:hover,.btnBad:hover{filter:brightness(1.05);}
+code{color:#fff;}
+</style>
+</head>
+
+<body>
+
+<!-- LOGIN -->
+<div id="login" class="card">
+  <h1>Formación DICO</h1>
+  <p>Ingreso al sistema de asistencia</p>
+
+  <label>Correo</label>
+  <input id="email" type="email" placeholder="correo@dico.com.co" autocomplete="username" />
+
+  <label>Contraseña</label>
+  <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+
+  <div class="row" style="margin-top:14px;">
+    <button id="btnLogin" type="button" style="width:100%;">Ingresar</button>
+  </div>
+
+  <div class="row" style="margin-top:10px;">
+    <button id="btnForgot" type="button" class="btnMini btnGhost" style="width:100%;">Recuperar contraseña (crear clave)</button>
+  </div>
+
+  <div id="loginMsg" class="small" style="margin-top:10px;text-align:center;"></div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden app">
+  <div class="topbar">
+    <div class="titleblock">
+      <h2 id="panelTitle">Panel</h2>
+      <div class="small" id="whoami">—</div>
+    </div>
+    <div class="pillrow">
+      <span class="badge" id="roleBadge">rol</span>
+      <button id="btnLogout" class="btnMini" type="button">Cerrar sesión</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT -->
+    <div class="panel" id="leftPanel"></div>
+
+    <!-- RIGHT -->
+    <div class="panel" id="rightPanel"></div>
+  </div>
+
+  <div class="panel" style="margin-top:14px;">
+    <h3>Estado</h3>
+    <div id="status" class="small">Listo.</div>
+    <pre id="log">(vacío)</pre>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   CONFIGURA AQUÍ TUS DATOS DE SUPABASE
+========================================================= */
+const SUPABASE_URL = "https://bqlltjronzrlgbjjntes.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_j84bjNzsEw1O-zsvliQ4Wg_BhGkSqR_"; // debe estar COMPLETA
+
+/* =========================================================
+   TABLAS ESPERADAS
+   - profiles: user_id(pk uuid), nombre, rol('super_admin'|'formador'), activo
+   - trainings: id uuid, nombre, vigencia_dias int, certifica bool
+   - sessions: id uuid, training_id uuid, fecha date, ciudad text, formador_user_id uuid, estado text
+   - employees: id uuid, documento text, nombre text, cargo, area, supervisor, email, estado
+   - citations: id uuid, session_id uuid, employee_id uuid, estado text
+   - attendance: session_id uuid, employee_id uuid, asistio bool
+   - session_days: (opcional) si la usas:
+        * ideal: session_id uuid, dia_numero int, UNIQUE(session_id,dia_numero)
+        * si tu tabla además tiene "fecha NOT NULL", este código la enviará también
+========================================================= */
+
+const EMP_HEADERS = ["documento","nombre","cargo","area","supervisor","email","estado"];
+
+/* =========================================================
+   HELPERS
+========================================================= */
+const $ = (id) => document.getElementById(id);
+const $status = $("status");
+const $log = $("log");
+
+function setStatus(html){ $status.innerHTML = html; }
+function setLog(obj){ $log.textContent = (typeof obj === "string") ? obj : JSON.stringify(obj, null, 2); }
+function esc(s){
+  return String(s ?? "")
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+function val(x){ return String(x ?? "").trim(); }
+function todayISO(){
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const dd = String(d.getDate()).padStart(2,"0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+function downloadTextFile(content, filename, mime){
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 600);
+}
+
+/* =========================================================
+   CSV / XLSX (robusto)
+   - Detecta separador , o ;
+   - Si el archivo trae UNA sola "celda" con encabezados unidos por "_" => lo separa
+========================================================= */
+function parseDelimited(text){
+  text = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  // detect delimiter (si hay más ; que , usamos ;)
+  const firstLine = (text.split("\n").find(l => l.trim().length) || "");
+  const commas = (firstLine.match(/,/g)||[]).length;
+  const semis  = (firstLine.match(/;/g)||[]).length;
+  const delim = semis > commas ? ";" : ",";
+
+  const rows = [];
+  let row = [];
+  let cur = "";
+  let inQuotes = false;
+
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    const n = text[i+1];
+    if(c === '"'){
+      if(inQuotes && n === '"'){ cur += '"'; i++; }
+      else inQuotes = !inQuotes;
+      continue;
+    }
+    if(c === delim && !inQuotes){ row.push(cur); cur=""; continue; }
+    if(c === "\n" && !inQuotes){ row.push(cur); rows.push(row); row=[]; cur=""; continue; }
+    cur += c;
+  }
+  if(cur.length || row.length){ row.push(cur); rows.push(row); }
+
+  // limpiar vacías
+  const cleaned = rows.map(r => r.map(c => (c ?? "").toString())).filter(r => r.some(c => c.trim() !== ""));
+  if(!cleaned.length) return cleaned;
+
+  // Caso raro: encabezados vienen como una sola celda: "documento_nombre_cargo..."
+  if(cleaned[0].length === 1){
+    const cell = (cleaned[0][0] || "").trim();
+    if(cell.includes("_") && EMP_HEADERS.every(h => cell.toLowerCase().includes(h))){
+      const hdrs = cell.split("_").map(s => s.trim());
+      cleaned[0] = hdrs;
+      // Repartir las filas si también vienen "pegadas" por "_" (muy común cuando el CSV quedó mal)
+      // Si una fila tiene 1 celda y contiene "_" entonces la separamos
+      for(let i=1;i<cleaned.length;i++){
+        if(cleaned[i].length === 1 && String(cleaned[i][0]||"").includes("_")){
+          cleaned[i] = String(cleaned[i][0]).split("_").map(s => s.trim());
+        }
+      }
+    }
+  }
+
+  return cleaned;
+}
+
+function parseXLSX(arrayBuffer){
+  if(!window.XLSX) throw new Error("La librería XLSX no cargó (bloqueada). Usa CSV.");
+  const wb = XLSX.read(arrayBuffer, { type: "array" });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+  return json.map(r => r.map(c => (c ?? "").toString())).filter(r => r.some(c => String(c).trim() !== ""));
+}
+
+/* =========================================================
+   SUPABASE
+========================================================= */
+function getSB(){
+  if(!window.supabase || !window.supabase.createClient){
+    throw new Error("No se cargó Supabase JS. Abre desde Live Server/GitHub Pages o revisa bloqueos.");
+  }
+  window.__sb = window.__sb || window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  return window.__sb;
+}
+
+/* =========================================================
+   AUTH: LOGIN / LOGOUT / FORGOT
+========================================================= */
+async function doLogin(){
+  const sb = getSB();
+  const email = val($("email").value);
+  const password = val($("password").value);
+  const btn = $("btnLogin");
+  const msg = $("loginMsg");
+
+  msg.innerHTML = "";
+  if(!email || !password){
+    msg.innerHTML = `<span class="err">Debes ingresar correo y contraseña.</span>`;
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Ingresando...";
+  msg.innerHTML = `<span class="small">Validando...</span>`;
+
+  try{
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    setLog({ login_data: data, login_error: error });
+
+    if(error){
+      msg.innerHTML = `<span class="err">${esc(error.message)}</span>`;
+      return;
+    }
+    if(!data?.session){
+      msg.innerHTML = `<span class="err">No se obtuvo sesión. Revisa credenciales.</span>`;
+      return;
+    }
+
+    await bootApp();
+  }catch(e){
+    msg.innerHTML = `<span class="err">${esc(e.message || e)}</span>`;
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "Ingresar";
+  }
+}
+
+async function doForgot(){
+  const sb = getSB();
+  const email = val($("email").value);
+  const msg = $("loginMsg");
+  msg.innerHTML = "";
+
+  if(!email){
+    msg.innerHTML = `<span class="err">Escribe el correo en el campo Correo.</span>`;
+    return;
+  }
+
+  try{
+    // Envía correo para crear/definir contraseña (esto arregla que “solo entra uno”)
+    const { data, error } = await sb.auth.resetPasswordForEmail(email);
+    setLog({ reset_data: data, reset_error: error });
+
+    if(error){
+      msg.innerHTML = `<span class="err">${esc(error.message)}</span>`;
+      return;
+    }
+    msg.innerHTML = `<span class="ok">Listo.</span> Revisa tu correo para crear la contraseña y luego intenta ingresar.`;
+  }catch(e){
+    msg.innerHTML = `<span class="err">${esc(e.message || e)}</span>`;
+  }
+}
+
+async function doLogout(){
+  const sb = getSB();
+  await sb.auth.signOut();
+  location.reload();
+}
+
+/* =========================================================
+   PROFILE (lee rol desde profiles)
+========================================================= */
+async function getProfile(user){
+  const sb = getSB();
+  const { data, error } = await sb
+    .from("profiles")
+    .select("user_id,nombre,rol,activo")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if(error) throw error;
+
+  // Si no existe fila, devolvemos un perfil mínimo para no romper UI
+  if(!data){
+    return { user_id: user.id, nombre: (user.email||"usuario").split("@")[0], rol: "formador", activo: true, __missing:true };
+  }
+  return data;
+}
+
+/* =========================================================
+   UI RENDER
+========================================================= */
+function setPanels(role){
+  if(role === "super_admin"){
+    $("leftPanel").innerHTML = renderAdminLeft();
+    $("rightPanel").innerHTML = renderAdminRight();
+    wireAdminHandlers();
+  }else{
+    $("leftPanel").innerHTML = renderTrainerLeft();
+    $("rightPanel").innerHTML = renderTrainerRight();
+    wireTrainerHandlers();
+  }
+}
+
+function renderAdminLeft(){
+  return `
+    <h3>Admin</h3>
+    <div class="small">Crea entrenamientos, sesiones, carga personal y cita empleados. (Los temas los asignas tú aparte).</div>
+    <hr/>
+
+    <div class="item">
+      <b>1) Cargar personal (employees)</b>
+      <div class="small">Sube CSV o XLSX. Encabezados requeridos: <code>${EMP_HEADERS.join(", ")}</code></div>
+      <div class="actions" style="margin-top:8px;">
+        <button id="btnEmpTemplateCSV" class="btnMini btnGhost" type="button">Descargar plantilla CSV</button>
+        <button id="btnEmpTemplateXLSX" class="btnMini btnGhost" type="button">Plantilla XLSX</button>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <input id="empFile" type="file" accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" />
+        <button id="btnEmpUpload" class="btnMini" type="button">Subir e insertar</button>
+      </div>
+      <div id="empMsg" class="small" style="margin-top:8px;"></div>
+    </div>
+
+    <hr/>
+
+    <div class="item">
+      <b>2) Crear entrenamiento</b>
+      <div class="small">Solo crea el tipo de capacitación y su duración.</div>
+
+      <label>Nombre del entrenamiento</label>
+      <input id="trNombre" placeholder="Ej: Trabajo en alturas" />
+
+      <div class="row">
+        <div class="col">
+          <label>Duración (días)</label>
+          <input id="trDuracion" type="number" min="1" max="3650" value="1" />
+        </div>
+        <div class="col">
+          <label>¿Certifica?</label>
+          <select id="trCertifica">
+            <option value="true">Sí</option>
+            <option value="false">No</option>
+          </select>
+        </div>
+      </div>
+
+      <button id="btnCreateTraining" style="margin-top:12px;width:100%;" type="button">Guardar entrenamiento</button>
+      <div id="trMsg" class="small" style="margin-top:8px;"></div>
+    </div>
+
+    <hr/>
+
+    <div class="item">
+      <b>3) Crear sesión</b>
+      <div class="small">
+        Importante: <b>NO</b> usamos desplegable de entrenamiento aquí. Tú pegas el <code>training_id</code> manualmente.
+      </div>
+
+      <label>training_id (uuid)</label>
+      <input id="sessionTrainingId" placeholder="Pega aquí el training_id" />
+
+      <div class="row">
+        <div class="col">
+          <label>Fecha</label>
+          <input id="sessionFecha" type="date" />
+        </div>
+        <div class="col">
+          <label>Ciudad</label>
+          <input id="sessionCiudad" placeholder="Ej: Bogotá" />
+        </div>
+      </div>
+
+      <label>Formador</label>
+      <select id="sessionFormador"></select>
+
+      <label>Estado (opcional)</label>
+      <input id="sessionEstado" placeholder="programada" value="programada" />
+
+      <button id="btnCreateSession" style="margin-top:12px;width:100%;" type="button">Crear sesión</button>
+      <div id="sessionMsg" class="small" style="margin-top:8px;"></div>
+
+      <div id="daysBox" class="hidden" style="margin-top:12px;">
+        <b style="display:block;margin-bottom:6px;">Días requeridos (1–14)</b>
+        <div class="small">
+          Si tu tabla <code>session_days</code> existe, guardaremos <code>session_id</code>, <code>dia_numero</code>
+          y si tu tabla exige <code>fecha NOT NULL</code>, también mandamos la fecha.
+        </div>
+        <div id="dayGrid" class="daygrid"></div>
+        <button id="btnSaveDays" class="btnMini btnGhost" style="margin-top:10px;width:100%;" type="button">Guardar días requeridos</button>
+        <div id="daysMsg" class="small" style="margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <hr/>
+
+    <div class="item">
+      <b>4) Citar empleados a una sesión</b>
+      <div class="small">Selecciona sesión, busca empleado y cita.</div>
+
+      <label>Sesión</label>
+      <select id="citeSession"></select>
+
+      <div class="row">
+        <div class="col">
+          <label>Buscar empleado (documento o nombre)</label>
+          <input id="empSearch" placeholder="Ej: 123456 o Juan" />
+        </div>
+        <div class="col" style="min-width:180px;">
+          <label>&nbsp;</label>
+          <button id="btnSearchEmp" class="btnMini btnGhost" type="button">Buscar</button>
+        </div>
+      </div>
+
+      <div id="empResults" class="list" style="margin-top:10px;"></div>
+      <div id="citeMsg" class="small" style="margin-top:8px;"></div>
+    </div>
+  `;
+}
+
+function renderAdminRight(){
+  return `
+    <h3>Sesiones</h3>
+    <div class="small">Lista de sesiones creadas (últimas 50).</div>
+    <hr/>
+    <div class="row">
+      <button id="btnRefreshAdmin" class="btnMini btnGhost" type="button">Actualizar</button>
+    </div>
+    <div id="adminSessions" class="list" style="margin-top:12px;"></div>
+  `;
+}
+
+function renderTrainerLeft(){
+  return `
+    <h3>Formador</h3>
+    <div class="small">Aquí verás tus sesiones y los empleados citados. Marcas asistencia (sí/no).</div>
+    <hr/>
+    <div class="item">
+      <b>Acciones</b>
+      <div class="actions">
+        <button id="btnRefreshTrainer" class="btnMini btnGhost" type="button">Actualizar</button>
+      </div>
+      <div class="small" style="margin-top:8px;">
+        Si no puedes ingresar con otros usuarios: usa <b>Recuperar contraseña</b> para que creen su clave.
+      </div>
+    </div>
+  `;
+}
+
+function renderTrainerRight(){
+  return `
+    <h3>Mis sesiones</h3>
+    <div class="small">Solo sesiones donde tú eres el formador.</div>
+    <hr/>
+    <div id="trainerSessions" class="list"></div>
+  `;
+}
+
+/* =========================================================
+   BOOT APP
+========================================================= */
+let STATE = { user:null, profile:null };
+
+async function bootApp(){
+  const sb = getSB();
+  const { data: { session } } = await sb.auth.getSession();
+
+  if(!session){
+    $("app").classList.add("hidden");
+    $("login").classList.remove("hidden");
+    $("loginMsg").innerHTML = `<span class="small">Listo para iniciar sesión.</span>`;
+    return;
+  }
+
+  const user = session.user;
+  const profile = await getProfile(user);
+
+  STATE.user = user;
+  STATE.profile = profile;
+
+  $("login").classList.add("hidden");
+  $("app").classList.remove("hidden");
+
+  $("whoami").textContent = `${user.email}  ·  ${profile.nombre || ""}  ·  uid: ${user.id}`;
+  $("roleBadge").textContent = profile.rol || "formador";
+  $("panelTitle").textContent = (profile.rol === "super_admin") ? "Panel Administrador" : "Panel Formador";
+  $("btnLogout").onclick = doLogout;
+
+  setPanels(profile.rol);
+
+  if(profile.__missing){
+    setStatus(`<span class="warn">Aviso:</span> No existe tu fila en <code>profiles</code>. (La UI sigue, pero crea el perfil para evitar problemas).`);
+  }else{
+    setStatus(`<span class="ok">Sesión activa.</span>`);
+  }
+
+  setLog({ session_user: user, profile });
+
+  if(profile.rol === "super_admin"){
+    await adminInit();
+  }else{
+    await trainerInit();
+  }
+}
+
+/* =========================================================
+   ADMIN
+========================================================= */
+function wireAdminHandlers(){
+  $("btnEmpTemplateCSV").onclick = () => {
+    const csv = EMP_HEADERS.join(",") + "\n";
+    downloadTextFile(csv, "plantilla_empleados.csv", "text/csv;charset=utf-8");
+    setStatus(`<span class="ok">Plantilla CSV descargada.</span>`);
+    setLog(csv);
+  };
+
+  $("btnEmpTemplateXLSX").onclick = () => {
+    try{
+      if(!window.XLSX) throw new Error("XLSX bloqueado. Usa la plantilla CSV.");
+      const ws = XLSX.utils.aoa_to_sheet([EMP_HEADERS]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "plantilla");
+      const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      const blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "plantilla_empleados.xlsx";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 600);
+      setStatus(`<span class="ok">Plantilla XLSX descargada.</span>`);
+      setLog({ headers: EMP_HEADERS });
+    }catch(e){
+      setStatus(`<span class="err">Error:</span> ${esc(e.message || e)}`);
+      setLog(e);
+    }
+  };
+
+  $("btnEmpUpload").onclick = adminUploadEmployees;
+  $("btnCreateTraining").onclick = adminCreateTraining;
+  $("btnCreateSession").onclick = adminCreateSession;
+  $("btnSaveDays").onclick = adminSaveSessionDays;
+  $("btnRefreshAdmin").onclick = adminRefreshAll;
+  $("btnSearchEmp").onclick = adminSearchEmployees;
+}
+
+async function adminInit(){
+  $("sessionFecha").value = todayISO();
+  await adminRefreshAll();
+}
+
+async function adminRefreshAll(){
+  await Promise.all([
+    adminLoadFormadores(),
+    adminLoadSessions(),
+    adminLoadSessionSelects()
+  ]);
+}
+
+async function adminLoadFormadores(){
+  const sb = getSB();
+  const sel = $("sessionFormador");
+  sel.innerHTML = `<option value="">Cargando formadores...</option>`;
+
+  const { data, error } = await sb
+    .from("profiles")
+    .select("user_id,nombre,rol,activo")
+    .eq("activo", true)
+    .order("nombre", { ascending:true });
+
+  if(error){
+    sel.innerHTML = `<option value="">(error)</option>`;
+    setStatus(`<span class="err">Error profiles:</span> ${esc(error.message)}`);
+    setLog(error);
+    return;
+  }
+
+  const formadores = (data || []).filter(p => (p.rol || "") === "formador");
+  if(!formadores.length){
+    sel.innerHTML = `<option value="">(No hay formadores en profiles)</option>`;
+    return;
+  }
+
+  sel.innerHTML = `<option value="">Selecciona formador...</option>` + formadores
+    .map(p => `<option value="${p.user_id}">${esc(p.nombre)} · ${p.user_id}</option>`)
+    .join("");
+}
+
+async function adminLoadSessions(){
+  const sb = getSB();
+  const cont = $("adminSessions");
+  cont.innerHTML = `<div class="small">Cargando...</div>`;
+
+  const { data, error } = await sb
+    .from("sessions")
+    .select(`id, training_id, fecha, ciudad, formador_user_id, estado, created_at`)
+    .order("fecha", { ascending:false })
+    .limit(50);
+
+  if(error){
+    cont.innerHTML = `<div class="small"><span class="err">Error:</span> ${esc(error.message)}</div>`;
+    setStatus(`<span class="err">Error sessions:</span> ${esc(error.message)}`);
+    setLog(error);
+    return;
+  }
+
+  if(!data?.length){
+    cont.innerHTML = `<div class="item"><div class="small">No hay sesiones registradas.</div></div>`;
+    return;
+  }
+
+  cont.innerHTML = data.map(s => `
+    <div class="item">
+      <div class="row" style="justify-content:space-between;">
+        <div><b>Sesión</b></div>
+        <span class="chip">${esc(s.estado || "—")}</span>
+      </div>
+      <div class="small" style="margin-top:6px;">${esc(s.fecha)} · ${esc(s.ciudad || "")}</div>
+      <div class="kv">
+        <div>session_id</div><div><code>${esc(s.id)}</code></div>
+        <div>training_id</div><div><code>${esc(s.training_id || "")}</code></div>
+        <div>formador_user_id</div><div><code>${esc(s.formador_user_id || "")}</code></div>
+      </div>
+      <div class="actions">
+        <button class="btnMini btnGhost" type="button" onclick="adminPickSession('${s.id}')">Usar para citación</button>
+        <button class="btnMini btnGhost" type="button" onclick="adminPickSessionDays('${s.id}')">Configurar días</button>
+        <button class="btnMini btnDanger" type="button" onclick="adminDeleteSession('${s.id}')">Eliminar sesión</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+async function adminLoadSessionSelects(){
+  const sb = getSB();
+  const sel = $("citeSession");
+  sel.innerHTML = `<option value="">Cargando sesiones...</option>`;
+
+  const { data, error } = await sb
+    .from("sessions")
+    .select(`id,fecha,ciudad,estado`)
+    .order("fecha", { ascending:false })
+    .limit(150);
+
+  if(error){
+    sel.innerHTML = `<option value="">(error)</option>`;
+    setStatus(`<span class="err">Error selector sesiones:</span> ${esc(error.message)}`);
+    setLog(error);
+    return;
+  }
+
+  if(!data?.length){
+    sel.innerHTML = `<option value="">(No hay sesiones)</option>`;
+    return;
+  }
+
+  sel.innerHTML = `<option value="">Selecciona sesión...</option>` + data.map(s => {
+    const tag = `${s.fecha} · ${s.ciudad || ""} · ${s.id}`;
+    return `<option value="${s.id}">${esc(tag)}</option>`;
+  }).join("");
+}
+
+/* Exponer funciones para botones */
+window.adminPickSession = (sessionId) => {
+  $("citeSession").value = sessionId;
+  setStatus(`<span class="ok">Sesión seleccionada para citación:</span> <code>${esc(sessionId)}</code>`);
+};
+
+window.adminPickSessionDays = async (sessionId) => {
+  $("daysBox").classList.remove("hidden");
+  $("daysBox").dataset.sessionId = sessionId;
+
+  // por defecto: 1..14 marcados (puedes desmarcar)
+  const grid = $("dayGrid");
+  grid.innerHTML = "";
+  for(let i=1;i<=14;i++){
+    const div = document.createElement("label");
+    div.className = "day";
+    div.innerHTML = `<input type="checkbox" data-day="${i}" ${i<=6 ? "checked":""} /> Día ${i}`;
+    grid.appendChild(div);
+  }
+
+  $("daysMsg").innerHTML = `<span class="small">Sesión: <code>${esc(sessionId)}</code>. Marca días y guarda.</span>`;
+  setStatus(`<span class="ok">Configurar días:</span> sesión <code>${esc(sessionId)}</code>`);
+};
+
+async function adminCreateTraining(){
+  const sb = getSB();
+  const nombre = val($("trNombre").value);
+  const vigencia = Number($("trDuracion").value || 1);
+  const certifica = $("trCertifica").value === "true";
+  const msg = $("trMsg");
+  msg.innerHTML = "";
+
+  if(!nombre){
+    msg.innerHTML = `<span class="err">Debes ingresar el nombre.</span>`;
+    return;
+  }
+  const vigencia_dias = Math.max(1, isFinite(vigencia)?vigencia:1);
+
+  $("btnCreateTraining").disabled = true;
+  $("btnCreateTraining").textContent = "Guardando...";
+
+  try{
+    const { data, error } = await sb
+      .from("trainings")
+      .insert({ nombre, vigencia_dias, certifica })
+      .select("id,nombre,vigencia_dias,certifica")
+      .single();
+
+    if(error) throw error;
+
+    msg.innerHTML = `<span class="ok">Entrenamiento creado.</span> training_id: <code>${esc(data.id)}</code>`;
+    setStatus(`<span class="ok">Entrenamiento guardado.</span>`);
+    setLog({ training_created: data });
+
+    $("trNombre").value = "";
+    $("trDuracion").value = 1;
+    $("trCertifica").value = "true";
+
+  }catch(e){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
+    setStatus(`<span class="err">No se pudo crear entrenamiento.</span>`);
+    setLog(e);
+  }finally{
+    $("btnCreateTraining").disabled = false;
+    $("btnCreateTraining").textContent = "Guardar entrenamiento";
+  }
+}
+
+async function adminCreateSession(){
+  const sb = getSB();
+
+  const training_id = val($("sessionTrainingId").value);   // MANUAL
+  const fecha = val($("sessionFecha").value);
+  const ciudad = val($("sessionCiudad").value);
+  const formador_user_id = $("sessionFormador").value;
+  const estado = val($("sessionEstado").value) || null;
+  const msg = $("sessionMsg");
+
+  msg.innerHTML = "";
+
+  if(!training_id){
+    msg.innerHTML = `<span class="err">Pega el training_id.</span>`;
+    return;
+  }
+  if(!fecha){
+    msg.innerHTML = `<span class="err">Selecciona la fecha.</span>`;
+    return;
+  }
+  if(!formador_user_id){
+    msg.innerHTML = `<span class="err">Selecciona el formador.</span>`;
+    return;
+  }
+
+  $("btnCreateSession").disabled = true;
+  $("btnCreateSession").textContent = "Creando...";
+
+  try{
+    const payload = { training_id, fecha, ciudad, formador_user_id, estado };
+    const { data, error } = await sb
+      .from("sessions")
+      .insert(payload)
+      .select("id,training_id,fecha,ciudad,formador_user_id,estado")
+      .single();
+
+    if(error) throw error;
+
+    msg.innerHTML = `<span class="ok">Sesión creada.</span> session_id: <code>${esc(data.id)}</code>`;
+    setStatus(`<span class="ok">Sesión creada.</span>`);
+    setLog({ session_created: data });
+
+    // mostrar daysBox listo
+    await window.adminPickSessionDays(data.id);
+
+    await adminLoadSessions();
+    await adminLoadSessionSelects();
+
+  }catch(e){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
+    setStatus(`<span class="err">No se pudo crear sesión.</span>`);
+    setLog(e);
+  }finally{
+    $("btnCreateSession").disabled = false;
+    $("btnCreateSession").textContent = "Crear sesión";
+  }
+}
+
+/* Guarda session_days:
+   - Intenta upsert con (session_id, dia_numero)
+   - Si tu tabla exige "fecha NOT NULL", añadimos fecha (de sessions.fecha)
+   - Si tu tabla NO tiene columna fecha, el primer intento fallará por columna inexistente => reintenta sin fecha
+*/
+async function adminSaveSessionDays(){
+  const sb = getSB();
+  const box = $("daysBox");
+  const session_id = box.dataset.sessionId;
+  const msg = $("daysMsg");
+  msg.innerHTML = "";
+
+  if(!session_id){
+    msg.innerHTML = `<span class="err">No hay sesión seleccionada.</span>`;
+    return;
+  }
+
+  const checks = Array.from(box.querySelectorAll('input[type="checkbox"][data-day]'));
+  const selected = checks.filter(c => c.checked).map(c => Number(c.dataset.day)).filter(n => n>=1 && n<=14);
+
+  if(!selected.length){
+    msg.innerHTML = `<span class="warn">No seleccionaste días.</span>`;
+    return;
+  }
+
+  $("btnSaveDays").disabled = true;
+  $("btnSaveDays").textContent = "Guardando...";
+
+  try{
+    // obtener fecha de la sesión (para casos donde session_days exige fecha NOT NULL)
+    const { data: srow, error: sErr } = await sb
+      .from("sessions")
+      .select("fecha")
+      .eq("id", session_id)
+      .maybeSingle();
+
+    if(sErr) throw sErr;
+    const fecha = srow?.fecha || null;
+
+    // intent 1: con fecha
+    let rowsWithFecha = selected.map(d => ({ session_id, dia_numero: d, fecha }));
+    let r = await sb.from("session_days").upsert(rowsWithFecha, { onConflict: "session_id,dia_numero" });
+
+    if(r.error){
+      // intent 2: sin fecha (por si la columna no existe)
+      const rows = selected.map(d => ({ session_id, dia_numero: d }));
+      r = await sb.from("session_days").upsert(rows, { onConflict: "session_id,dia_numero" });
+    }
+
+    if(r.error){
+      msg.innerHTML = `<span class="warn">Aviso:</span> No pude guardar en <code>session_days</code>. (${esc(r.error.message)})`;
+      setStatus(`<span class="warn">No se guardaron días requeridos.</span>`);
+      setLog({ session_days_error: r.error, session_id, selected, fecha });
+      return;
+    }
+
+    msg.innerHTML = `<span class="ok">Días guardados.</span> (${selected.join(", ")})`;
+    setStatus(`<span class="ok">Días requeridos guardados.</span>`);
+    setLog({ session_days_saved: { session_id, selected, fecha } });
+
+  }catch(e){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
+    setStatus(`<span class="err">Error guardando días.</span>`);
+    setLog(e);
+  }finally{
+    $("btnSaveDays").disabled = false;
+    $("btnSaveDays").textContent = "Guardar días requeridos";
+  }
+}
+
+/* Eliminar sesión (borra dependencias) */
+window.adminDeleteSession = async (session_id) => {
+  if(!confirm("¿Eliminar esta sesión?\n\nSe eliminarán también citaciones, días y asistencias asociadas.")) return;
+  const sb = getSB();
+  setStatus(`Eliminando sesión <code>${esc(session_id)}</code>...`);
+
+  try{
+    // attendance
+    let r = await sb.from("attendance").delete().eq("session_id", session_id);
+    if(r.error) throw r.error;
+
+    // citations
+    r = await sb.from("citations").delete().eq("session_id", session_id);
+    if(r.error) throw r.error;
+
+    // session_days (si existe)
+    r = await sb.from("session_days").delete().eq("session_id", session_id);
+    // si falla por no existir tabla, no rompemos
+    if(r.error && !String(r.error.message||"").toLowerCase().includes("relation")) {
+      // no hacemos throw, solo log
+      setLog({ session_days_delete_warn: r.error });
+    }
+
+    // sessions
+    r = await sb.from("sessions").delete().eq("id", session_id);
+    if(r.error) throw r.error;
+
+    setStatus(`<span class="ok">Sesión eliminada.</span>`);
+    setLog({ session_deleted: session_id });
+
+    await adminLoadSessions();
+    await adminLoadSessionSelects();
+
+  }catch(e){
+    setStatus(`<span class="err">Error eliminando:</span> ${esc(e.message || e)}`);
+    setLog(e);
+  }
+};
+
+/* =========================================================
+   ADMIN: EMPLOYEES IMPORT (CSV/XLSX)
+========================================================= */
+async function adminUploadEmployees(){
+  const sb = getSB();
+  const file = $("empFile").files?.[0];
+  const msg = $("empMsg");
+  msg.innerHTML = "";
+
+  if(!file){
+    alert("Selecciona un CSV o XLSX.");
+    return;
+  }
+
+  $("btnEmpUpload").disabled = true;
+  $("btnEmpUpload").textContent = "Procesando...";
+  setStatus("Leyendo archivo...");
+
+  try{
+    let rows = [];
+    if(file.name.toLowerCase().endsWith(".xlsx")){
+      const buf = await file.arrayBuffer();
+      rows = parseXLSX(buf);
+    }else{
+      const text = await file.text();
+      rows = parseDelimited(text);
+    }
+
+    if(!rows.length) throw new Error("Archivo vacío.");
+
+    // headers normalizados
+    let headers = rows[0].map(h => val(h).toLowerCase());
+    // también normalizar si vienen con espacios
+    headers = headers.map(h => h.replace(/\s+/g," ").trim());
+
+    const missing = EMP_HEADERS.filter(h => !headers.includes(h));
+    if(missing.length){
+      throw new Error(
+        `Faltan columnas requeridas: ${missing.join(", ")}\nEncabezados detectados: ${headers.join(", ")}`
+      );
+    }
+
+    const idx = {};
+    headers.forEach((h,i)=> idx[h]=i);
+
+    const dataRows = rows.slice(1).filter(r => r.some(c => val(c) !== ""));
+    if(!dataRows.length) throw new Error("No hay filas de datos.");
+
+    const payload = dataRows.map(r => ({
+      documento: val(r[idx.documento]),
+      nombre: val(r[idx.nombre]),
+      cargo: val(r[idx.cargo]),
+      area: val(r[idx.area]),
+      supervisor: val(r[idx.supervisor]),
+      email: val(r[idx.email]),
+      estado: val(r[idx.estado]) || "activo"
+    })).filter(x => x.documento && x.nombre);
+
+    if(!payload.length) throw new Error("No hay registros válidos (requiere documento y nombre).");
+
+    setStatus(`Insertando/actualizando ${payload.length} empleados...`);
+    setLog({ employees_preview: payload.slice(0, 8), total: payload.length });
+
+    // Recomendado: UNIQUE(documento) y upsert
+    let res = await sb
+      .from("employees")
+      .upsert(payload, { onConflict: "documento" })
+      .select("id,documento,nombre");
+
+    // Si tu tabla no tiene unique(documento), reintenta insert
+    if(res.error && String(res.error.message||"").toLowerCase().includes("on conflict")){
+      res = await sb.from("employees").insert(payload).select("id,documento,nombre");
+    }
+
+    if(res.error) throw res.error;
+
+    msg.innerHTML = `<span class="ok">Empleados cargados.</span> (${res.data?.length ?? 0})`;
+    setStatus(`<span class="ok">Empleados cargados.</span>`);
+    setLog({ employees_inserted_or_upserted: res.data });
+
+  }catch(e){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
+    setStatus(`<span class="err">Error cargando employees.</span>`);
+    setLog(e);
+  }finally{
+    $("btnEmpUpload").disabled = false;
+    $("btnEmpUpload").textContent = "Subir e insertar";
+  }
+}
+
+/* =========================================================
+   ADMIN: CITAR EMPLEADOS (búsqueda + upsert)
+========================================================= */
+async function adminSearchEmployees(){
+  const sb = getSB();
+  const q = val($("empSearch").value);
+  const out = $("empResults");
+  out.innerHTML = "";
+
+  if(!q){
+    out.innerHTML = `<div class="small"><span class="warn">Ingresa algo para buscar.</span></div>`;
+    return;
+  }
+
+  setStatus("Buscando empleados...");
+  try{
+    const { data, error } = await sb
+      .from("employees")
+      .select("id,documento,nombre,cargo,area,estado")
+      .or(`documento.eq.${q},nombre.ilike.%${q}%`)
+      .limit(25);
+
+    if(error) throw error;
+
+    if(!data?.length){
+      out.innerHTML = `<div class="small">Sin resultados.</div>`;
+      setStatus(`<span class="warn">Sin resultados.</span>`);
+      return;
+    }
+
+    out.innerHTML = data.map(e => `
+      <div class="item">
+        <b>${esc(e.nombre)}</b>
+        <div class="small">${esc(e.documento)} · ${esc(e.cargo || "")} · ${esc(e.area || "")}</div>
+        <div class="actions">
+          <button class="btnMini" type="button" onclick="adminAddCitation('${e.id}')">Citar a esta sesión</button>
+        </div>
+      </div>
+    `).join("");
+
+    setStatus(`<span class="ok">Resultados:</span> ${data.length}`);
+    setLog({ employee_search: q, results: data });
+
+  }catch(err){
+    out.innerHTML = `<div class="small"><span class="err">Error:</span> ${esc(err.message || err)}</div>`;
+    setStatus(`<span class="err">Error búsqueda empleados.</span>`);
+    setLog(err);
+  }
+}
+
+window.adminAddCitation = async (employee_id) => {
+  const sb = getSB();
+  const session_id = $("citeSession").value;
+  const msg = $("citeMsg");
+
+  if(!session_id){
+    alert("Selecciona una sesión primero.");
+    return;
+  }
+
+  msg.innerHTML = "Citando...";
+  setStatus("Guardando citación...");
+
+  try{
+    const payload = { session_id, employee_id, estado: "citada" };
+
+    let res = await sb
+      .from("citations")
+      .upsert(payload, { onConflict: "session_id,employee_id" })
+      .select("id,session_id,employee_id,estado")
+      .single();
+
+    // fallback si no hay unique/constraint
+    if(res.error && String(res.error.message||"").toLowerCase().includes("on conflict")){
+      res = await sb.from("citations").insert(payload).select("id,session_id,employee_id,estado").single();
+    }
+    if(res.error) throw res.error;
+
+    msg.innerHTML = `<span class="ok">Citado.</span> employee_id: <code>${esc(employee_id)}</code>`;
+    setStatus(`<span class="ok">Empleado citado.</span>`);
+    setLog({ citation_saved: res.data });
+
+  }catch(err){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(err.message || err)}`;
+    setStatus(`<span class="err">No se pudo citar.</span>`);
+    setLog(err);
+  }
+};
+
+/* =========================================================
+   FORMADOR
+========================================================= */
+function wireTrainerHandlers(){
+  $("btnRefreshTrainer").onclick = trainerInit;
+}
+
+async function trainerInit(){
+  await trainerLoadSessions();
+}
+
+async function trainerLoadSessions(){
+  const sb = getSB();
+  const cont = $("trainerSessions");
+  cont.innerHTML = `<div class="small">Cargando...</div>`;
+
+  try{
+    const { data: { user } } = await sb.auth.getUser();
+    if(!user) throw new Error("No hay usuario autenticado.");
+
+    const { data: sessions, error } = await sb
+      .from("sessions")
+      .select(`id, fecha, ciudad, estado`)
+      .eq("formador_user_id", user.id)
+      .order("fecha", { ascending:false })
+      .limit(50);
+
+    if(error) throw error;
+
+    if(!sessions?.length){
+      cont.innerHTML = `<div class="item"><div class="small">No hay sesiones asignadas.</div></div>`;
+      setStatus(`<span class="warn">Sin sesiones.</span>`);
+      return;
+    }
+
+    cont.innerHTML = sessions.map(s => `
+      <div class="item" id="sess_${s.id}">
+        <div class="row" style="justify-content:space-between;">
+          <div><b>Sesión</b></div>
+          <span class="chip">${esc(s.estado || "—")}</span>
+        </div>
+        <div class="small" style="margin-top:6px;">${esc(s.fecha)} · ${esc(s.ciudad || "")}</div>
+        <div class="kv" style="margin-top:8px;">
+          <div>session_id</div><div><code>${esc(s.id)}</code></div>
+        </div>
+
+        <hr/>
+        <b>Citados</b>
+        <div class="small">Marca asistencia. (Se guarda en <code>attendance</code>.)</div>
+        <div class="tablelike" style="margin-top:10px;">
+          <div class="tr th">
+            <div>Empleado</div><div>Asistió</div><div>No asistió</div>
+          </div>
+          <div class="tr"><div class="small">Cargando citados...</div><div></div><div></div></div>
+        </div>
+      </div>
+    `).join("");
+
+    for(const s of sessions){
+      await trainerLoadCitadosInto(s.id);
+    }
+
+    setStatus(`<span class="ok">Sesiones cargadas.</span>`);
+    setLog({ trainer_sessions: sessions });
+
+  }catch(err){
+    cont.innerHTML = `<div class="item"><div class="small"><span class="err">Error:</span> ${esc(err.message || err)}</div></div>`;
+    setStatus(`<span class="err">Error cargando sesiones.</span>`);
+    setLog(err);
+  }
+}
+
+async function trainerLoadCitadosInto(session_id){
+  const sb = getSB();
+  const box = document.querySelector(`#sess_${CSS.escape(session_id)} .tablelike`);
+  if(!box) return;
+
+  try{
+    const { data: cit, error } = await sb
+      .from("citations")
+      .select(`employee_id, employees ( id, documento, nombre )`)
+      .eq("session_id", session_id)
+      .order("created_at", { ascending:true });
+
+    if(error) throw error;
+
+    const { data: at, error: e2 } = await sb
+      .from("attendance")
+      .select("employee_id, asistio")
+      .eq("session_id", session_id);
+
+    if(e2) throw e2;
+
+    const attMap = new Map((at || []).map(a => [a.employee_id, a.asistio]));
+
+    const rows = [];
+    if(!cit?.length){
+      rows.push(`<div class="tr"><div class="small">No hay citados.</div><div></div><div></div></div>`);
+    }else{
+      for(const c of cit){
+        const emp = c.employees;
+        const name = emp?.nombre ? `${emp.nombre} (${emp.documento || ""})` : (c.employee_id || "");
+        const asistio = attMap.has(c.employee_id) ? attMap.get(c.employee_id) : null;
+
+        rows.push(`
+          <div class="tr">
+            <div class="small">${esc(name)}</div>
+            <div>
+              <button class="btnMini btnOk" type="button"
+                onclick="trainerMark('${session_id}','${c.employee_id}',true)"
+                ${asistio === true ? 'disabled' : ''}>Sí</button>
+            </div>
+            <div>
+              <button class="btnMini btnBad" type="button"
+                onclick="trainerMark('${session_id}','${c.employee_id}',false)"
+                ${asistio === false ? 'disabled' : ''}>No</button>
+            </div>
+          </div>
+        `);
+      }
+    }
+
+    const header = box.querySelector(".tr.th");
+    box.innerHTML = "";
+    box.appendChild(header);
+    box.insertAdjacentHTML("beforeend", rows.join(""));
+
+  }catch(err){
+    const header = box.querySelector(".tr.th");
+    box.innerHTML = "";
+    box.appendChild(header);
+    box.insertAdjacentHTML("beforeend", `
+      <div class="tr">
+        <div class="small"><span class="err">Error citados/asistencia:</span> ${esc(err.message || err)}</div><div></div><div></div>
+      </div>
+    `);
+    setLog({ trainer_load_citados_error: err, session_id });
+  }
+}
+
+window.trainerMark = async (session_id, employee_id, asistio) => {
+  const sb = getSB();
+  setStatus("Guardando asistencia...");
+
+  try{
+    const payload = { session_id, employee_id, asistio: !!asistio };
+
+    let res = await sb
+      .from("attendance")
+      .upsert(payload, { onConflict: "session_id,employee_id" });
+
+    if(res.error && String(res.error.message||"").toLowerCase().includes("on conflict")){
+      res = await sb.from("attendance").insert(payload);
+    }
+    if(res.error) throw res.error;
+
+    setStatus(`<span class="ok">Asistencia guardada.</span>`);
+    setLog({ attendance_saved: payload });
+
+    await trainerLoadCitadosInto(session_id);
+
+  }catch(err){
+    setStatus(`<span class="err">Error guardando asistencia:</span> ${esc(err.message || err)}`);
+    setLog(err);
+  }
+};
+
+/* =========================================================
+   INIT
+========================================================= */
+document.addEventListener("DOMContentLoaded", async () => {
+  try{
+    $("btnLogin").addEventListener("click", doLogin);
+    $("btnForgot").addEventListener("click", doForgot);
+    $("email").addEventListener("keydown", (e)=>{ if(e.key==="Enter") doLogin(); });
+    $("password").addEventListener("keydown", (e)=>{ if(e.key==="Enter") doLogin(); });
+
+    if(!window.supabase){
+      $("loginMsg").innerHTML = `<span class="err">No cargó Supabase JS (posible bloqueo del navegador).</span>`;
+      return;
+    }
+
+    await bootApp();
+  }catch(e){
+    $("loginMsg").innerHTML = `<span class="err">${esc(e.message || e)}</span>`;
+    setLog(e);
+  }
+});
+</script>
+
+</body>
+</html>
