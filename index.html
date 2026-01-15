@@ -230,9 +230,8 @@ code{color:#fff;}
     <div class="pillrow">
       <span class="badge" id="roleBadge">rol</span>
 
-      <!-- Cierra sesiones activas en otros dispositivos -->
-      <button id="btnRevokeOthers" class="btnMini btnDanger hidden" type="button"
-        title="Cierra sesiones activas en otros dispositivos (no te saca a ti)">
+      <!-- NUEVO: revocar sesiones en otros dispositivos -->
+      <button id="btnRevokeOthers" class="btnMini btnDanger hidden" type="button" title="Cierra sesiones activas en otros dispositivos (no te saca a ti)">
         Cerrar otras sesiones
       </button>
 
@@ -312,6 +311,7 @@ function showOnly(view){
 }
 
 function goToLogin(){
+  // Limpia hash para que no se quede en modo reset
   window.location.hash = "";
   showOnly("login");
   $("loginMsg").innerHTML = `<span class="small">Listo para iniciar sesión.</span>`;
@@ -448,7 +448,9 @@ async function doForgot(){
   }
 
   try{
+    // IMPORTANTE: redirectTo a tu ruta con #reset
     const redirectTo = `${window.location.origin}${window.location.pathname}#reset`;
+
     const { data, error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
     setLog({ reset_data: data, reset_error: error, redirectTo });
 
@@ -468,7 +470,7 @@ async function doLogout(){
   location.reload();
 }
 
-// Cerrar otras sesiones (sin sacarte a ti)
+// NUEVO: Cerrar otras sesiones (sin sacarte a ti)
 async function doRevokeOtherSessions(){
   const sb = getSB();
   const ok = confirm("Esto cerrará sesiones activas en otros dispositivos para tu usuario.\n\n¿Continuar?");
@@ -486,7 +488,7 @@ async function doRevokeOtherSessions(){
   }
 }
 
-// Guardar contraseña (flujo recovery)
+// NUEVO: guardar contraseña (flujo recovery)
 async function doResetPassword(){
   const sb = getSB();
   const msg = $("resetMsg");
@@ -510,6 +512,7 @@ async function doResetPassword(){
   btn.textContent = "Guardando...";
 
   try{
+    // Si el enlace es válido, Supabase detecta sesión en URL.
     const { data: sess } = await sb.auth.getSession();
     if(!sess?.session){
       msg.innerHTML = `<span class="err">El enlace expiró o es inválido.</span><br/><span class="small">Vuelve a pulsar "Recuperar contraseña" y usa el correo más reciente.</span>`;
@@ -526,6 +529,7 @@ async function doResetPassword(){
 
     msg.innerHTML = `<span class="ok">Contraseña actualizada.</span> Ya puedes iniciar sesión.`;
 
+    // Limpia hash y vuelve al login
     setTimeout(() => {
       goToLogin();
     }, 1200);
@@ -689,11 +693,12 @@ function renderAdminLeft(){
 
     <hr/>
 
+    <!-- ✅ NUEVO: CARGA MASIVA DE CITACIONES -->
     <div class="item">
       <b>5) Cargar citaciones masivas (citations) desde Excel/CSV</b>
       <div class="small">
         Sube CSV/XLSX con columnas: <code>session_id, documento</code> (opcional <code>estado</code>).<br/>
-        El sistema buscará el empleado por <code>documento</code> en <code>employees</code> y creará la citación.
+        El sistema busca el empleado por <code>documento</code> en <code>employees</code> y crea la citación.
       </div>
 
       <div class="actions" style="margin-top:8px;">
@@ -833,14 +838,7 @@ function wireAdminHandlers(){
     }
   };
 
-  $("btnEmpUpload").onclick = adminUploadEmployees;
-  $("btnCreateTraining").onclick = adminCreateTraining;
-  $("btnCreateSession").onclick = adminCreateSession;
-  $("btnSaveDays").onclick = adminSaveSessionDays;
-  $("btnRefreshAdmin").onclick = adminRefreshAll;
-  $("btnSearchEmp").onclick = adminSearchEmployees;
-
-  // Citaciones masivas
+  // ✅ NUEVO: plantilla + carga masiva citaciones
   $("btnCiteTemplateCSV").onclick = () => {
     const csv = "session_id,documento,estado\n";
     downloadTextFile(csv, "plantilla_citaciones.csv", "text/csv;charset=utf-8");
@@ -848,6 +846,13 @@ function wireAdminHandlers(){
     setLog(csv);
   };
   $("btnCiteUpload").onclick = adminUploadCitations;
+
+  $("btnEmpUpload").onclick = adminUploadEmployees;
+  $("btnCreateTraining").onclick = adminCreateTraining;
+  $("btnCreateSession").onclick = adminCreateSession;
+  $("btnSaveDays").onclick = adminSaveSessionDays;
+  $("btnRefreshAdmin").onclick = adminRefreshAll;
+  $("btnSearchEmp").onclick = adminSearchEmployees;
 }
 
 async function adminInit(){
@@ -1252,7 +1257,98 @@ async function adminUploadEmployees(){
   }
 }
 
-// NUEVO: carga masiva de citaciones desde CSV/XLSX
+async function adminSearchEmployees(){
+  const sb = getSB();
+  const q = val($("empSearch").value);
+  const out = $("empResults");
+  out.innerHTML = "";
+
+  if(!q){
+    out.innerHTML = `<div class="small"><span class="warn">Ingresa algo para buscar.</span></div>`;
+    return;
+  }
+
+  setStatus("Buscando empleados...");
+  try{
+    const { data, error } = await sb
+      .from("employees")
+      .select("id,documento,nombre,cargo,area,estado")
+      .or(`documento.eq.${q},nombre.ilike.%${q}%`)
+      .limit(25);
+
+    if(error) throw error;
+
+    if(!data?.length){
+      out.innerHTML = `<div class="small">Sin resultados.</div>`;
+      setStatus(`<span class="warn">Sin resultados.</span>`);
+      return;
+    }
+
+    out.innerHTML = data.map(e => `
+      <div class="item">
+        <b>${esc(e.nombre)}</b>
+        <div class="small">${esc(e.documento)} · ${esc(e.cargo || "")} · ${esc(e.area || "")}</div>
+        <div class="actions">
+          <button class="btnMini" type="button" onclick="adminAddCitation('${e.id}')">Citar a esta sesión</button>
+        </div>
+      </div>
+    `).join("");
+
+    setStatus(`<span class="ok">Resultados:</span> ${data.length}`);
+    setLog({ employee_search: q, results: data });
+
+  }catch(err){
+    out.innerHTML = `<div class="small"><span class="err">Error:</span> ${esc(err.message || err)}</div>`;
+    setStatus(`<span class="err">Error búsqueda empleados.</span>`);
+    setLog(err);
+  }
+}
+
+window.adminAddCitation = async (employee_id) => {
+  const sb = getSB();
+  const session_id = $("citeSession").value;
+  const msg = $("citeMsg");
+
+  if(!session_id){
+    alert("Selecciona una sesión primero.");
+    return;
+  }
+
+  msg.innerHTML = "Citando...";
+  setStatus("Guardando citación...");
+
+  try{
+    const payload = { session_id, employee_id, estado: "citada" };
+
+    let res = await sb
+      .from("citations")
+      .upsert(payload, { onConflict: "session_id,employee_id" })
+      .select("id,session_id,employee_id,estado")
+      .single();
+
+    if(res.error && String(res.error.message||"").toLowerCase().includes("on conflict")){
+      res = await sb.from("citations").insert(payload).select("id,session_id,employee_id,estado").single();
+    }
+    if(res.error) throw res.error;
+
+    msg.innerHTML = `<span class="ok">Citado.</span> employee_id: <code>${esc(employee_id)}</code>`;
+    setStatus(`<span class="ok">Empleado citado.</span>`);
+    setLog({ citation_saved: res.data });
+
+  }catch(err){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(err.message || err)}`;
+    setStatus(`<span class="err">No se pudo citar.</span>`);
+    setLog(err);
+  }
+};
+
+/* =========================================================
+   ✅ NUEVO: CARGA MASIVA CITACIONES DESDE EXCEL/CSV
+   Requiere columnas: session_id, documento (opcional: estado)
+   - Busca employee_id por employees.documento
+   - Upsert a citations con onConflict session_id,employee_id
+   - Descarga CSV de no encontrados
+========================================================= */
 async function adminUploadCitations(){
   const sb = getSB();
   const file = $("citeFile")?.files?.[0];
@@ -1359,6 +1455,7 @@ async function adminUploadCitations(){
     setStatus(`<span class="ok">Citaciones guardadas.</span>`);
     setLog({ citations_saved: payload.length, not_found: notFound.length });
 
+    // Descarga CSV con no encontrados (para corregir)
     if(notFound.length){
       const csv = "session_id,documento,estado\n" + notFound.map(x =>
         `${x.session_id},${x.documento},${x.estado || "citada"}`
@@ -1375,91 +1472,6 @@ async function adminUploadCitations(){
     $("btnCiteUpload").textContent = "Subir citaciones";
   }
 }
-
-async function adminSearchEmployees(){
-  const sb = getSB();
-  const q = val($("empSearch").value);
-  const out = $("empResults");
-  out.innerHTML = "";
-
-  if(!q){
-    out.innerHTML = `<div class="small"><span class="warn">Ingresa algo para buscar.</span></div>`;
-    return;
-  }
-
-  setStatus("Buscando empleados...");
-  try{
-    const { data, error } = await sb
-      .from("employees")
-      .select("id,documento,nombre,cargo,area,estado")
-      .or(`documento.eq.${q},nombre.ilike.%${q}%`)
-      .limit(25);
-
-    if(error) throw error;
-
-    if(!data?.length){
-      out.innerHTML = `<div class="small">Sin resultados.</div>`;
-      setStatus(`<span class="warn">Sin resultados.</span>`);
-      return;
-    }
-
-    out.innerHTML = data.map(e => `
-      <div class="item">
-        <b>${esc(e.nombre)}</b>
-        <div class="small">${esc(e.documento)} · ${esc(e.cargo || "")} · ${esc(e.area || "")}</div>
-        <div class="actions">
-          <button class="btnMini" type="button" onclick="adminAddCitation('${e.id}')">Citar a esta sesión</button>
-        </div>
-      </div>
-    `).join("");
-
-    setStatus(`<span class="ok">Resultados:</span> ${data.length}`);
-    setLog({ employee_search: q, results: data });
-
-  }catch(err){
-    out.innerHTML = `<div class="small"><span class="err">Error:</span> ${esc(err.message || err)}</div>`;
-    setStatus(`<span class="err">Error búsqueda empleados.</span>`);
-    setLog(err);
-  }
-}
-
-window.adminAddCitation = async (employee_id) => {
-  const sb = getSB();
-  const session_id = $("citeSession").value;
-  const msg = $("citeMsg");
-
-  if(!session_id){
-    alert("Selecciona una sesión primero.");
-    return;
-  }
-
-  msg.innerHTML = "Citando...";
-  setStatus("Guardando citación...");
-
-  try{
-    const payload = { session_id, employee_id, estado: "citada" };
-
-    let res = await sb
-      .from("citations")
-      .upsert(payload, { onConflict: "session_id,employee_id" })
-      .select("id,session_id,employee_id,estado")
-      .single();
-
-    if(res.error && String(res.error.message||"").toLowerCase().includes("on conflict")){
-      res = await sb.from("citations").insert(payload).select("id,session_id,employee_id,estado").single();
-    }
-    if(res.error) throw res.error;
-
-    msg.innerHTML = `<span class="ok">Citado.</span> employee_id: <code>${esc(employee_id)}</code>`;
-    setStatus(`<span class="ok">Empleado citado.</span>`);
-    setLog({ citation_saved: res.data });
-
-  }catch(err){
-    msg.innerHTML = `<span class="err">Error:</span> ${esc(err.message || err)}`;
-    setStatus(`<span class="err">No se pudo citar.</span>`);
-    setLog(err);
-  }
-};
 
 /* =========================================================
    FORMADOR
@@ -1651,6 +1663,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       showOnly("reset");
       $("resetMsg").innerHTML = `<span class="small">Cargando recuperación...</span>`;
 
+      // Fuerza lectura de sesión detectada en URL
       const sb = getSB();
       await sb.auth.getSession();
 
