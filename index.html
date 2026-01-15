@@ -198,6 +198,28 @@ code{color:#fff;}
   <div id="loginMsg" class="small" style="margin-top:10px;text-align:center;"></div>
 </div>
 
+<!-- RESET PASSWORD -->
+<div id="resetBox" class="card hidden">
+  <h1>Restablecer contraseña</h1>
+  <p>Ingresa tu nueva contraseña para finalizar la recuperación</p>
+
+  <label>Nueva contraseña</label>
+  <input id="newPassword" type="password" placeholder="Mínimo 6 caracteres" autocomplete="new-password" />
+
+  <label>Confirmar contraseña</label>
+  <input id="newPassword2" type="password" placeholder="Repite la contraseña" autocomplete="new-password" />
+
+  <div class="row" style="margin-top:14px;">
+    <button id="btnReset" type="button" style="width:100%;">Guardar contraseña</button>
+  </div>
+
+  <div class="row" style="margin-top:10px;">
+    <button id="btnResetBack" type="button" class="btnMini btnGhost" style="width:100%;">Volver al login</button>
+  </div>
+
+  <div id="resetMsg" class="small" style="margin-top:10px;text-align:center;"></div>
+</div>
+
 <!-- APP -->
 <div id="app" class="hidden app">
   <div class="topbar">
@@ -207,6 +229,12 @@ code{color:#fff;}
     </div>
     <div class="pillrow">
       <span class="badge" id="roleBadge">rol</span>
+
+      <!-- NUEVO: revocar sesiones en otros dispositivos -->
+      <button id="btnRevokeOthers" class="btnMini btnDanger hidden" type="button" title="Cierra sesiones activas en otros dispositivos (no te saca a ti)">
+        Cerrar otras sesiones
+      </button>
+
       <button id="btnLogout" class="btnMini" type="button">Cerrar sesión</button>
     </div>
   </div>
@@ -232,19 +260,6 @@ code{color:#fff;}
 ========================================================= */
 const SUPABASE_URL = "https://bqlltjronzrlgbjjntes.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_j84bjNzsEw1O-zsvliQ4Wg_BhGkSqR_"; // debe estar COMPLETA
-
-/* =========================================================
-   TABLAS ESPERADAS
-   - profiles: user_id(pk uuid), nombre, rol('super_admin'|'formador'), activo
-   - trainings: id uuid, nombre, vigencia_dias int, certifica bool
-   - sessions: id uuid, training_id uuid, fecha date, ciudad text, formador_user_id uuid, estado text
-   - employees: id uuid, documento text, nombre text, cargo, area, supervisor, email, estado
-   - citations: id uuid, session_id uuid, employee_id uuid, estado text
-   - attendance: session_id uuid, employee_id uuid, asistio bool
-   - session_days: (opcional) si la usas:
-        * ideal: session_id uuid, dia_numero int, UNIQUE(session_id,dia_numero)
-        * si tu tabla además tiene "fecha NOT NULL", este código la enviará también
-========================================================= */
 
 const EMP_HEADERS = ["documento","nombre","cargo","area","supervisor","email","estado"];
 
@@ -281,13 +296,32 @@ function downloadTextFile(content, filename, mime){
 }
 
 /* =========================================================
+   DETECCIÓN RESET (desde email)
+========================================================= */
+function isRecoveryFlow(){
+  const h = (window.location.hash || "").toLowerCase();
+  return h.includes("type=recovery") || h.includes("#reset") || h.includes("access_token=");
+}
+
+function showOnly(view){
+  // view: "login" | "reset" | "app"
+  $("login").classList.toggle("hidden", view !== "login");
+  $("resetBox").classList.toggle("hidden", view !== "reset");
+  $("app").classList.toggle("hidden", view !== "app");
+}
+
+function goToLogin(){
+  // Limpia hash para que no se quede en modo reset
+  window.location.hash = "";
+  showOnly("login");
+  $("loginMsg").innerHTML = `<span class="small">Listo para iniciar sesión.</span>`;
+}
+
+/* =========================================================
    CSV / XLSX (robusto)
-   - Detecta separador , o ;
-   - Si el archivo trae UNA sola "celda" con encabezados unidos por "_" => lo separa
 ========================================================= */
 function parseDelimited(text){
   text = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  // detect delimiter (si hay más ; que , usamos ;)
   const firstLine = (text.split("\n").find(l => l.trim().length) || "");
   const commas = (firstLine.match(/,/g)||[]).length;
   const semis  = (firstLine.match(/;/g)||[]).length;
@@ -312,7 +346,6 @@ function parseDelimited(text){
   }
   if(cur.length || row.length){ row.push(cur); rows.push(row); }
 
-  // limpiar vacías
   const cleaned = rows.map(r => r.map(c => (c ?? "").toString())).filter(r => r.some(c => c.trim() !== ""));
   if(!cleaned.length) return cleaned;
 
@@ -322,8 +355,6 @@ function parseDelimited(text){
     if(cell.includes("_") && EMP_HEADERS.every(h => cell.toLowerCase().includes(h))){
       const hdrs = cell.split("_").map(s => s.trim());
       cleaned[0] = hdrs;
-      // Repartir las filas si también vienen "pegadas" por "_" (muy común cuando el CSV quedó mal)
-      // Si una fila tiene 1 celda y contiene "_" entonces la separamos
       for(let i=1;i<cleaned.length;i++){
         if(cleaned[i].length === 1 && String(cleaned[i][0]||"").includes("_")){
           cleaned[i] = String(cleaned[i][0]).split("_").map(s => s.trim());
@@ -331,7 +362,6 @@ function parseDelimited(text){
       }
     }
   }
-
   return cleaned;
 }
 
@@ -350,12 +380,22 @@ function getSB(){
   if(!window.supabase || !window.supabase.createClient){
     throw new Error("No se cargó Supabase JS. Abre desde Live Server/GitHub Pages o revisa bloqueos.");
   }
-  window.__sb = window.__sb || window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  window.__sb = window.__sb || window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY,
+    {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    }
+  );
   return window.__sb;
 }
 
 /* =========================================================
-   AUTH: LOGIN / LOGOUT / FORGOT
+   AUTH: LOGIN / LOGOUT / FORGOT / RESET / REVOKE SESSIONS
 ========================================================= */
 async function doLogin(){
   const sb = getSB();
@@ -408,9 +448,11 @@ async function doForgot(){
   }
 
   try{
-    // Envía correo para crear/definir contraseña (esto arregla que “solo entra uno”)
-    const { data, error } = await sb.auth.resetPasswordForEmail(email);
-    setLog({ reset_data: data, reset_error: error });
+    // IMPORTANTE: redirectTo a tu ruta con #reset
+    const redirectTo = `${window.location.origin}${window.location.pathname}#reset`;
+
+    const { data, error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
+    setLog({ reset_data: data, reset_error: error, redirectTo });
 
     if(error){
       msg.innerHTML = `<span class="err">${esc(error.message)}</span>`;
@@ -428,8 +470,81 @@ async function doLogout(){
   location.reload();
 }
 
+// NUEVO: Cerrar otras sesiones (sin sacarte a ti)
+async function doRevokeOtherSessions(){
+  const sb = getSB();
+  const ok = confirm("Esto cerrará sesiones activas en otros dispositivos para tu usuario.\n\n¿Continuar?");
+  if(!ok) return;
+
+  try{
+    setStatus("Cerrando otras sesiones...");
+    const { error } = await sb.auth.signOut({ scope: "others" });
+    if(error) throw error;
+    setStatus(`<span class="ok">Listo.</span> Otras sesiones cerradas.`);
+    setLog({ revoke_other_sessions: "ok" });
+  }catch(e){
+    setStatus(`<span class="err">Error:</span> ${esc(e.message || e)}`);
+    setLog(e);
+  }
+}
+
+// NUEVO: guardar contraseña (flujo recovery)
+async function doResetPassword(){
+  const sb = getSB();
+  const msg = $("resetMsg");
+  const btn = $("btnReset");
+
+  const p1 = val($("newPassword").value);
+  const p2 = val($("newPassword2").value);
+
+  msg.innerHTML = "";
+
+  if(!p1 || p1.length < 6){
+    msg.innerHTML = `<span class="err">Mínimo 6 caracteres.</span>`;
+    return;
+  }
+  if(p1 !== p2){
+    msg.innerHTML = `<span class="err">Las contraseñas no coinciden.</span>`;
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Guardando...";
+
+  try{
+    // Si el enlace es válido, Supabase detecta sesión en URL.
+    const { data: sess } = await sb.auth.getSession();
+    if(!sess?.session){
+      msg.innerHTML = `<span class="err">El enlace expiró o es inválido.</span><br/><span class="small">Vuelve a pulsar "Recuperar contraseña" y usa el correo más reciente.</span>`;
+      return;
+    }
+
+    const { data, error } = await sb.auth.updateUser({ password: p1 });
+    setLog({ updateUser_data: data, updateUser_error: error });
+
+    if(error){
+      msg.innerHTML = `<span class="err">${esc(error.message)}</span>`;
+      return;
+    }
+
+    msg.innerHTML = `<span class="ok">Contraseña actualizada.</span> Ya puedes iniciar sesión.`;
+
+    // Limpia hash y vuelve al login
+    setTimeout(() => {
+      goToLogin();
+    }, 1200);
+
+  }catch(e){
+    msg.innerHTML = `<span class="err">${esc(e.message || e)}</span>`;
+    setLog(e);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "Guardar contraseña";
+  }
+}
+
 /* =========================================================
-   PROFILE (lee rol desde profiles)
+   PROFILE
 ========================================================= */
 async function getProfile(user){
   const sb = getSB();
@@ -441,7 +556,6 @@ async function getProfile(user){
 
   if(error) throw error;
 
-  // Si no existe fila, devolvemos un perfil mínimo para no romper UI
   if(!data){
     return { user_id: user.id, nombre: (user.email||"usuario").split("@")[0], rol: "formador", activo: true, __missing:true };
   }
@@ -466,7 +580,7 @@ function setPanels(role){
 function renderAdminLeft(){
   return `
     <h3>Admin</h3>
-    <div class="small">Crea entrenamientos, sesiones, carga personal y cita empleados. (Los temas los asignas tú aparte).</div>
+    <div class="small">Crea entrenamientos, sesiones, carga personal y cita empleados.</div>
     <hr/>
 
     <div class="item">
@@ -627,8 +741,7 @@ async function bootApp(){
   const { data: { session } } = await sb.auth.getSession();
 
   if(!session){
-    $("app").classList.add("hidden");
-    $("login").classList.remove("hidden");
+    showOnly("login");
     $("loginMsg").innerHTML = `<span class="small">Listo para iniciar sesión.</span>`;
     return;
   }
@@ -639,13 +752,20 @@ async function bootApp(){
   STATE.user = user;
   STATE.profile = profile;
 
-  $("login").classList.add("hidden");
-  $("app").classList.remove("hidden");
+  showOnly("app");
 
   $("whoami").textContent = `${user.email}  ·  ${profile.nombre || ""}  ·  uid: ${user.id}`;
   $("roleBadge").textContent = profile.rol || "formador";
   $("panelTitle").textContent = (profile.rol === "super_admin") ? "Panel Administrador" : "Panel Formador";
   $("btnLogout").onclick = doLogout;
+
+  // NUEVO: botón revocar otras sesiones (solo admin)
+  if(profile.rol === "super_admin"){
+    $("btnRevokeOthers").classList.remove("hidden");
+    $("btnRevokeOthers").onclick = doRevokeOtherSessions;
+  }else{
+    $("btnRevokeOthers").classList.add("hidden");
+  }
 
   setPanels(profile.rol);
 
@@ -829,7 +949,6 @@ window.adminPickSessionDays = async (sessionId) => {
   $("daysBox").classList.remove("hidden");
   $("daysBox").dataset.sessionId = sessionId;
 
-  // por defecto: 1..14 marcados (puedes desmarcar)
   const grid = $("dayGrid");
   grid.innerHTML = "";
   for(let i=1;i<=14;i++){
@@ -890,7 +1009,7 @@ async function adminCreateTraining(){
 async function adminCreateSession(){
   const sb = getSB();
 
-  const training_id = val($("sessionTrainingId").value);   // MANUAL
+  const training_id = val($("sessionTrainingId").value);
   const fecha = val($("sessionFecha").value);
   const ciudad = val($("sessionCiudad").value);
   const formador_user_id = $("sessionFormador").value;
@@ -899,18 +1018,9 @@ async function adminCreateSession(){
 
   msg.innerHTML = "";
 
-  if(!training_id){
-    msg.innerHTML = `<span class="err">Pega el training_id.</span>`;
-    return;
-  }
-  if(!fecha){
-    msg.innerHTML = `<span class="err">Selecciona la fecha.</span>`;
-    return;
-  }
-  if(!formador_user_id){
-    msg.innerHTML = `<span class="err">Selecciona el formador.</span>`;
-    return;
-  }
+  if(!training_id){ msg.innerHTML = `<span class="err">Pega el training_id.</span>`; return; }
+  if(!fecha){ msg.innerHTML = `<span class="err">Selecciona la fecha.</span>`; return; }
+  if(!formador_user_id){ msg.innerHTML = `<span class="err">Selecciona el formador.</span>`; return; }
 
   $("btnCreateSession").disabled = true;
   $("btnCreateSession").textContent = "Creando...";
@@ -929,9 +1039,7 @@ async function adminCreateSession(){
     setStatus(`<span class="ok">Sesión creada.</span>`);
     setLog({ session_created: data });
 
-    // mostrar daysBox listo
     await window.adminPickSessionDays(data.id);
-
     await adminLoadSessions();
     await adminLoadSessionSelects();
 
@@ -945,11 +1053,6 @@ async function adminCreateSession(){
   }
 }
 
-/* Guarda session_days:
-   - Intenta upsert con (session_id, dia_numero)
-   - Si tu tabla exige "fecha NOT NULL", añadimos fecha (de sessions.fecha)
-   - Si tu tabla NO tiene columna fecha, el primer intento fallará por columna inexistente => reintenta sin fecha
-*/
 async function adminSaveSessionDays(){
   const sb = getSB();
   const box = $("daysBox");
@@ -974,22 +1077,18 @@ async function adminSaveSessionDays(){
   $("btnSaveDays").textContent = "Guardando...";
 
   try{
-    // obtener fecha de la sesión (para casos donde session_days exige fecha NOT NULL)
     const { data: srow, error: sErr } = await sb
       .from("sessions")
       .select("fecha")
       .eq("id", session_id)
       .maybeSingle();
-
     if(sErr) throw sErr;
     const fecha = srow?.fecha || null;
 
-    // intent 1: con fecha
     let rowsWithFecha = selected.map(d => ({ session_id, dia_numero: d, fecha }));
     let r = await sb.from("session_days").upsert(rowsWithFecha, { onConflict: "session_id,dia_numero" });
 
     if(r.error){
-      // intent 2: sin fecha (por si la columna no existe)
       const rows = selected.map(d => ({ session_id, dia_numero: d }));
       r = await sb.from("session_days").upsert(rows, { onConflict: "session_id,dia_numero" });
     }
@@ -1015,30 +1114,23 @@ async function adminSaveSessionDays(){
   }
 }
 
-/* Eliminar sesión (borra dependencias) */
 window.adminDeleteSession = async (session_id) => {
   if(!confirm("¿Eliminar esta sesión?\n\nSe eliminarán también citaciones, días y asistencias asociadas.")) return;
   const sb = getSB();
   setStatus(`Eliminando sesión <code>${esc(session_id)}</code>...`);
 
   try{
-    // attendance
     let r = await sb.from("attendance").delete().eq("session_id", session_id);
     if(r.error) throw r.error;
 
-    // citations
     r = await sb.from("citations").delete().eq("session_id", session_id);
     if(r.error) throw r.error;
 
-    // session_days (si existe)
     r = await sb.from("session_days").delete().eq("session_id", session_id);
-    // si falla por no existir tabla, no rompemos
     if(r.error && !String(r.error.message||"").toLowerCase().includes("relation")) {
-      // no hacemos throw, solo log
       setLog({ session_days_delete_warn: r.error });
     }
 
-    // sessions
     r = await sb.from("sessions").delete().eq("id", session_id);
     if(r.error) throw r.error;
 
@@ -1054,19 +1146,13 @@ window.adminDeleteSession = async (session_id) => {
   }
 };
 
-/* =========================================================
-   ADMIN: EMPLOYEES IMPORT (CSV/XLSX)
-========================================================= */
 async function adminUploadEmployees(){
   const sb = getSB();
   const file = $("empFile").files?.[0];
   const msg = $("empMsg");
   msg.innerHTML = "";
 
-  if(!file){
-    alert("Selecciona un CSV o XLSX.");
-    return;
-  }
+  if(!file){ alert("Selecciona un CSV o XLSX."); return; }
 
   $("btnEmpUpload").disabled = true;
   $("btnEmpUpload").textContent = "Procesando...";
@@ -1084,9 +1170,7 @@ async function adminUploadEmployees(){
 
     if(!rows.length) throw new Error("Archivo vacío.");
 
-    // headers normalizados
     let headers = rows[0].map(h => val(h).toLowerCase());
-    // también normalizar si vienen con espacios
     headers = headers.map(h => h.replace(/\s+/g," ").trim());
 
     const missing = EMP_HEADERS.filter(h => !headers.includes(h));
@@ -1117,13 +1201,11 @@ async function adminUploadEmployees(){
     setStatus(`Insertando/actualizando ${payload.length} empleados...`);
     setLog({ employees_preview: payload.slice(0, 8), total: payload.length });
 
-    // Recomendado: UNIQUE(documento) y upsert
     let res = await sb
       .from("employees")
       .upsert(payload, { onConflict: "documento" })
       .select("id,documento,nombre");
 
-    // Si tu tabla no tiene unique(documento), reintenta insert
     if(res.error && String(res.error.message||"").toLowerCase().includes("on conflict")){
       res = await sb.from("employees").insert(payload).select("id,documento,nombre");
     }
@@ -1144,9 +1226,6 @@ async function adminUploadEmployees(){
   }
 }
 
-/* =========================================================
-   ADMIN: CITAR EMPLEADOS (búsqueda + upsert)
-========================================================= */
 async function adminSearchEmployees(){
   const sb = getSB();
   const q = val($("empSearch").value);
@@ -1216,7 +1295,6 @@ window.adminAddCitation = async (employee_id) => {
       .select("id,session_id,employee_id,estado")
       .single();
 
-    // fallback si no hay unique/constraint
     if(res.error && String(res.error.message||"").toLowerCase().includes("on conflict")){
       res = await sb.from("citations").insert(payload).select("id,session_id,employee_id,estado").single();
     }
@@ -1407,11 +1485,27 @@ document.addEventListener("DOMContentLoaded", async () => {
   try{
     $("btnLogin").addEventListener("click", doLogin);
     $("btnForgot").addEventListener("click", doForgot);
+    $("btnReset").addEventListener("click", doResetPassword);
+    $("btnResetBack").addEventListener("click", goToLogin);
+
     $("email").addEventListener("keydown", (e)=>{ if(e.key==="Enter") doLogin(); });
     $("password").addEventListener("keydown", (e)=>{ if(e.key==="Enter") doLogin(); });
 
     if(!window.supabase){
       $("loginMsg").innerHTML = `<span class="err">No cargó Supabase JS (posible bloqueo del navegador).</span>`;
+      return;
+    }
+
+    // Si viene del correo de recuperación, mostrar reset
+    if(isRecoveryFlow()){
+      showOnly("reset");
+      $("resetMsg").innerHTML = `<span class="small">Cargando recuperación...</span>`;
+
+      // Fuerza lectura de sesión detectada en URL
+      const sb = getSB();
+      await sb.auth.getSession();
+
+      $("resetMsg").innerHTML = `<span class="small">Ingresa tu nueva contraseña.</span>`;
       return;
     }
 
@@ -1425,3 +1519,4 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
+
