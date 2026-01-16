@@ -685,9 +685,10 @@ function renderAdminRight(){
     <h3>Sesiones</h3>
     <div class="small">Lista de sesiones creadas (últimas 50).</div>
     <hr/>
-    <div class="row">
-      <button id="btnRefreshAdmin" class="btnMini btnGhost" type="button">Actualizar</button>
-    </div>
+   <div class="row">
+  <button id="btnRefreshAdmin" class="btnMini btnGhost" type="button">Actualizar</button>
+  <button id="btnOpenDashboard" class="btnMini" type="button">Ver Dashboard</button>
+</div>
     <div id="adminSessions" class="list" style="margin-top:12px;"></div>
   `;
 }
@@ -777,6 +778,7 @@ function wireAdminHandlers(){
     downloadTextFile(csv, "plantilla_empleados.csv", "text/csv;charset=utf-8");
     setStatus(`<span class="ok">Plantilla CSV descargada.</span>`);
     setLog(csv);
+    $("btnOpenDashboard").onclick = () => window.open("dashboard_super_admin.html", "_blank");
   };
 
   $("btnEmpTemplateXLSX").onclick = () => {
@@ -1296,6 +1298,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
+
 
 
 
