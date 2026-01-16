@@ -784,7 +784,6 @@ function wireAdminHandlers(){
     downloadTextFile(csv, "plantilla_empleados.csv", "text/csv;charset=utf-8");
     setStatus(`<span class="ok">Plantilla CSV descargada.</span>`);
     setLog(csv);
-    $("btnOpenDashboard").onclick = () => window.open("dashboard_super_admin.html", "_blank");
   };
 
   $("btnEmpTemplateXLSX").onclick = () => {
@@ -1304,6 +1303,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
+
 
 
 
