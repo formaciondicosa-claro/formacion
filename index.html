@@ -1689,33 +1689,43 @@ window.trainerMark = async (session_id, employee_id, session_date, asistio) => {
 /* =========================================================
    INIT
 ========================================================= */
+<script>
 document.addEventListener("DOMContentLoaded", async () => {
-  try{
+  try {
     $("btnLogin").addEventListener("click", doLogin);
     $("btnForgot").addEventListener("click", doForgot);
     $("btnReset").addEventListener("click", doResetPassword);
     $("btnResetBack").addEventListener("click", goToLogin);
 
-    $("email").addEventListener("keydown", (e)=>{ if(e.key==="Enter") doLogin(); });
-    $("password").addEventListener("keydown", (e)=>{ if(e.key==="Enter") doLogin(); });
+    $("email").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") doLogin();
+    });
+    $("password").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") doLogin();
+    });
 
-    if(!window.supabase){
-      $("loginMsg").innerHTML = `<span class="err">No cargó Supabase JS (posible bloqueo del navegador).</span>`;
+    if (!window.supabase) {
+      $("loginMsg").innerHTML =
+        '<span class="err">No cargó Supabase JS (posible bloqueo del navegador).</span>';
       return;
     }
 
-    if(isRecoveryFlow()){
+    if (isRecoveryFlow()) {
       showOnly("reset");
-      $("resetMsg").innerHTML = `<span class="small">Cargando recuperación...</span>`;
+      $("resetMsg").innerHTML =
+        '<span class="small">Cargando recuperación...</span>';
       const sb = getSB();
       await sb.auth.getSession();
-      $("resetMsg").innerHTML = `<span class="small">Ingresa tu nueva contraseña.</span>`;
+      $("resetMsg").innerHTML =
+        '<span class="small">Ingresa tu nueva contraseña.</span>';
       return;
     }
-  try{
+
     await bootApp();
-  }catch(e){
-    $("loginMsg").innerHTML = '<span class="err">' + esc(e.message || e) + '</span>';
+
+  } catch (e) {
+    $("loginMsg").innerHTML =
+      '<span class="err">' + esc(e.message || e) + '</span>';
     setLog(e);
   }
 });
@@ -1723,7 +1733,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
-
 
 
 
