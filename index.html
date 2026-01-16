@@ -740,7 +740,7 @@ async function bootApp(){
 
   $("whoami").textContent = `${user.email}  ·  ${profile.nombre || ""}  ·  uid: ${user.id}`;
   $("roleBadge").textContent = profile.rol || "formador";
-  $("panelTitle").textContent = (profile.rol === "super_admin") ? "Panel Administrador" : "Panel Formador";
+ $("panelTitle").textContent = (profile.rol === "super_admin") ? "Módulo: Asignación de entrenamientos" : "Panel Formador";
   document.body.classList.toggle("formador", profile.rol !== "super_admin");
   $("btnLogout").onclick = doLogout;
 
@@ -1296,6 +1296,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
+
 
 
 
