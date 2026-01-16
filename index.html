@@ -493,7 +493,6 @@ async function doResetPassword(){
     }
 
     msg.innerHTML = `<span class="ok">Contraseña actualizada.</span> Ya puedes iniciar sesión.`;
-
     setTimeout(() => { goToLogin(); }, 1200);
 
   }catch(e){
@@ -892,7 +891,7 @@ async function adminLoadSessions(){
     return;
   }
 
-  // NOTA: aquí QUITAMOS "Usar para citación" y "Configurar días" como pediste
+  // Se mantienen eliminados "Usar para citación" y "Configurar días"
   cont.innerHTML = data.map(s => `
     <div class="item">
       <div class="row" style="justify-content:space-between;">
@@ -1023,7 +1022,6 @@ async function adminCreateSession(){
     setStatus(`<span class="ok">Sesión creada.</span> Ahora configura y guarda fechas.`);
     setLog({ session_created: data });
 
-    // Mostrar UI fechas
     await adminPrepareSessionDatesUI(data.id, training_id, fecha);
 
     await adminLoadSessions();
@@ -1095,7 +1093,6 @@ async function adminSaveSessionDates(){
     return;
   }
 
-  // validar duplicados
   const set = new Set(fechas);
   if(set.size !== fechas.length){
     msg.innerHTML = `<span class="err">Hay fechas repetidas. Corrige antes de guardar.</span>`;
@@ -1107,7 +1104,6 @@ async function adminSaveSessionDates(){
   setStatus("Guardando fechas reales...");
 
   try{
-    // Estrategia: borrar existentes y reinsertar (simple y consistente)
     let r = await sb.from("session_dates").delete().eq("session_id", session_id);
     if(r.error) throw r.error;
 
@@ -1136,13 +1132,20 @@ window.adminDeleteSession = async (session_id) => {
   setStatus(`Eliminando sesión <code>${esc(session_id)}</code>...`);
 
   try{
-    // attendance_dates depende de session_dates, así que borramos session_dates y cascada borra attendance_dates
-    let r = await sb.from("citations").delete().eq("session_id", session_id);
+    // 1) asistencia por fechas (Opción B)
+    // (si no existe la tabla, lo tratamos como warning)
+    let r = await sb.from("attendance_dates").delete().eq("session_id", session_id);
+    if(r.error && !String(r.error.message||"").toLowerCase().includes("relation")) throw r.error;
+
+    // 2) citaciones
+    r = await sb.from("citations").delete().eq("session_id", session_id);
     if(r.error) throw r.error;
 
+    // 3) fechas configuradas
     r = await sb.from("session_dates").delete().eq("session_id", session_id);
     if(r.error) throw r.error;
 
+    // 4) sesión
     r = await sb.from("sessions").delete().eq("id", session_id);
     if(r.error) throw r.error;
 
@@ -1353,7 +1356,6 @@ async function adminUploadCitations(){
 
     if(!raw.length) throw new Error("No hay filas válidas. Requiere session_id y documento.");
 
-    // Agrupar por sesión para optimizar
     const bySession = new Map();
     for(const r of raw){
       if(!bySession.has(r.session_id)) bySession.set(r.session_id, []);
@@ -1364,8 +1366,8 @@ async function adminUploadCitations(){
     const report = [];
 
     for(const [session_id, docs] of bySession.entries()){
-      // 1) buscar employees por documento
       const uniqueDocs = Array.from(new Set(docs)).filter(Boolean);
+
       const { data: emps, error: e1 } = await sb
         .from("employees")
         .select("id,documento")
@@ -1375,7 +1377,6 @@ async function adminUploadCitations(){
 
       const mapDocToId = new Map((emps||[]).map(e => [String(e.documento), e.id]));
 
-      // 2) preparar payload citations
       const payload = [];
       const notFound = [];
 
@@ -1413,7 +1414,10 @@ async function adminUploadCitations(){
 }
 
 /* =========================================================
-   FORMADOR (asistencia por fecha real)
+   FORMADOR (Opción B real):
+   - session_dates: (id, session_id, fecha)
+   - attendance_dates: (session_id, employee_id, fecha, asistio)
+   IMPORTANTE: aquí NO se usa session_date_id.
 ========================================================= */
 function wireTrainerHandlers(){
   $("btnRefreshTrainer").onclick = trainerInit;
@@ -1509,7 +1513,7 @@ async function trainerLoadDatesInto(session_id){
   try{
     const { data: dates, error } = await sb
       .from("session_dates")
-      .select("id,fecha")
+      .select("fecha")
       .eq("session_id", session_id)
       .order("fecha", { ascending:true });
 
@@ -1522,9 +1526,9 @@ async function trainerLoadDatesInto(session_id){
     }
 
     const prev = sel.value;
-    sel.innerHTML = dates.map(d => `<option value="${esc(d.id)}">${esc(d.fecha)}</option>`).join("");
-    // conservar selección si existe
-    if(prev && dates.some(d => d.id === prev)) sel.value = prev;
+    sel.innerHTML = dates.map(d => `<option value="${esc(d.fecha)}">${esc(d.fecha)}</option>`).join("");
+
+    if(prev && dates.some(d => d.fecha === prev)) sel.value = prev;
 
     sel.onchange = () => trainerLoadCitadosInto(session_id);
 
@@ -1541,19 +1545,19 @@ async function trainerLoadCitadosInto(session_id){
 
   const table = sessBox.querySelector(".tablelike");
   const sel = sessBox.querySelector(".dateSelect");
-  const session_date_id = sel?.value || null;
+  const selectedFecha = sel?.value || null;
 
   const header = table.querySelector(".tr.th");
   table.innerHTML = "";
   table.appendChild(header);
 
-  if(!session_date_id){
+  if(!selectedFecha){
     table.insertAdjacentHTML("beforeend", `<div class="tr"><div class="small"><span class="warn">Selecciona una fecha.</span></div><div></div><div></div></div>`);
     return;
   }
 
   try{
-    // citaciones de la sesión
+    // 1) citaciones de la sesión
     const { data: cit, error } = await sb
       .from("citations")
       .select(`employee_id, employees ( id, documento, nombre )`)
@@ -1567,37 +1571,37 @@ async function trainerLoadCitadosInto(session_id){
       return;
     }
 
-    // asistencia para esta fecha
     const empIds = cit.map(c => c.employee_id);
+
+    // 2) asistencia SOLO para esta fecha (attendance_dates: session_id + fecha)
     const { data: at, error: e2 } = await sb
       .from("attendance_dates")
       .select("employee_id, asistio")
-      .eq("session_date_id", session_date_id)
+      .eq("session_id", session_id)
+      .eq("fecha", selectedFecha)
       .in("employee_id", empIds);
 
     if(e2) throw e2;
 
     const attMap = new Map((at || []).map(a => [a.employee_id, a.asistio]));
 
-    // para el progreso X/N: contamos total fechas y asistencias true por empleado
+    // 3) total días requeridos
     const { data: datesAll, error: e3 } = await sb
       .from("session_dates")
-      .select("id")
+      .select("fecha")
       .eq("session_id", session_id);
 
     if(e3) throw e3;
 
     const totalDays = (datesAll || []).length || 0;
 
-    // obtener asistencias true para todos los días de la sesión (solo para empleados citados)
-    // Nota: hacemos query por session_date_id IN (...)
-    const dateIds = (datesAll || []).map(d => d.id);
+    // 4) asistencias TRUE acumuladas por empleado (para progreso X/N)
     let trueMap = new Map(); // employee_id -> count true
-    if(dateIds.length){
+    if(totalDays > 0){
       const { data: atAll, error: e4 } = await sb
         .from("attendance_dates")
-        .select("employee_id, asistio, session_date_id")
-        .in("session_date_id", dateIds)
+        .select("employee_id, asistio")
+        .eq("session_id", session_id)
         .in("employee_id", empIds);
 
       if(e4) throw e4;
@@ -1609,7 +1613,7 @@ async function trainerLoadCitadosInto(session_id){
       }
     }
 
-    // render
+    // 5) render
     for(const c of cit){
       const emp = c.employees;
       const name = emp?.nombre ? `${emp.nombre} (${emp.documento || ""})` : (c.employee_id || "");
@@ -1629,12 +1633,12 @@ async function trainerLoadCitadosInto(session_id){
           </div>
           <div>
             <button class="btnMini btnOk" type="button"
-              onclick="trainerMark('${session_date_id}','${c.employee_id}',true,'${session_id}')"
+              onclick="trainerMark('${session_id}','${c.employee_id}','${selectedFecha}',true)"
               ${asistio === true ? 'disabled' : ''}>Sí</button>
           </div>
           <div>
             <button class="btnMini btnBad" type="button"
-              onclick="trainerMark('${session_date_id}','${c.employee_id}',false,'${session_id}')"
+              onclick="trainerMark('${session_id}','${c.employee_id}','${selectedFecha}',false)"
               ${asistio === false ? 'disabled' : ''}>No</button>
           </div>
         </div>
@@ -1647,20 +1651,23 @@ async function trainerLoadCitadosInto(session_id){
         <div class="small"><span class="err">Error citados/asistencia:</span> ${esc(err.message || err)}</div><div></div><div></div>
       </div>
     `);
-    setLog({ trainer_load_citados_error: err, session_id });
+    setLog({ trainer_load_citados_error: err, session_id, selectedFecha });
   }
 }
 
-window.trainerMark = async (session_date_id, employee_id, asistio, session_id) => {
+window.trainerMark = async (session_id, employee_id, fecha, asistio) => {
   const sb = getSB();
   setStatus("Guardando asistencia...");
 
   try{
-    const payload = { session_date_id, employee_id, asistio: !!asistio };
+    // Opción B: attendance_dates requiere session_id NOT NULL
+    const payload = { session_id, employee_id, fecha, asistio: !!asistio };
 
-    // upsert en tabla PK (session_date_id, employee_id)
-    let res = await sb.from("attendance_dates").upsert(payload);
-    if(res.error) throw res.error;
+    const { error } = await sb
+      .from("attendance_dates")
+      .upsert(payload, { onConflict: "session_id,employee_id,fecha" });
+
+    if(error) throw error;
 
     setStatus(`<span class="ok">Asistencia guardada.</span>`);
     setLog({ attendance_dates_saved: payload });
@@ -1710,4 +1717,3 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
-
