@@ -894,7 +894,10 @@ async function adminLoadSessions(){
         <div><b>Sesión</b></div>
         <span class="chip">${esc(s.estado || "—")}</span>
       </div>
-      <div class="small" style="margin-top:6px;">${esc(s.fecha)} · ${esc(s.ciudad || "")}</div>
+      <div class="small" style="margin-top:6px;">
+  <b>${esc(s.trainings?.nombre || "Entrenamiento")}</b><br>
+  Sesión · ${esc(s.fecha)} · ${esc(s.ciudad || "")}
+</div>
       <div class="kv">
         <div>session_id</div><div><code>${esc(s.id)}</code></div>
         <div>training_id</div><div><code>${esc(s.training_id || "")}</code></div>
@@ -1425,12 +1428,18 @@ async function trainerLoadSessions(){
     const { data: { user } } = await sb.auth.getUser();
     if(!user) throw new Error("No hay usuario autenticado.");
 
-    const { data: sessions, error } = await sb
-      .from("sessions")
-      .select(`id, fecha, ciudad, estado`)
-      .eq("formador_user_id", user.id)
-      .order("fecha", { ascending:false })
-      .limit(50);
+   const { data: sessions, error } = await sb
+  .from("sessions")
+  .select(`
+    id,
+    fecha,
+    ciudad,
+    estado,
+    trainings ( nombre )
+  `)
+  .eq("formador_user_id", user.id)
+  .order("fecha", { ascending:false });
+
 
     if(error) throw error;
 
@@ -1738,3 +1747,4 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
+
