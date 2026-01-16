@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Formación DICO – Dashboard Super Admin</title>
+
+<!-- Supabase JS v2 -->
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+<style>
+:root{
+  --violeta:#a78bfa; --violeta-osc:#7c3aed;
+  --bg:#050617; --bg2:#111827; --card:#17182b;
+  --text:#e8e6ff; --muted:#bfbde6; --border-soft:rgba(167,139,250,.25);
+  --danger:#f97373; --success:#34d399; --warn:#facc15; --info:#38bdf8;
+}
+*{box-sizing:border-box;font-family:system-ui,Segoe UI,Roboto,sans-serif;}
+body{
+  margin:0;min-height:100vh;
+  background:radial-gradient(circle at top,var(--bg2),var(--bg));
+  color:var(--text);
+  padding:16px;
+}
+.hidden{display:none!important;}
+.card{
+  width:100%;
+  background:rgba(23,24,43,.85);
+  border:1px solid var(--border-soft);
+  border-radius:16px;
+  padding:18px;
+  box-shadow:0 20px 45px rgba(0,0,0,.55);
+}
+h1{margin:0 0 6px 0;color:var(--violeta);}
+p{margin:0 0 14px 0;color:var(--muted);font-size:14px;}
+label{display:block;margin-top:10px;color:var(--muted);font-size:12px;}
+input, select{
+  width:100%; padding:12px; margin-top:8px;
+  border-radius:10px; border:1px solid var(--border-soft);
+  background:#0b0c1a; color:var(--text); font-size:14px;
+}
+input:focus, select:focus{outline:none;border-color:var(--violeta);}
+button{
+  border:0;border-radius:10px;
+  padding:12px 14px;
+  background:var(--violeta);
+  color:#050617;font-weight:900;
+  cursor:pointer;
+}
+button:hover{background:var(--violeta-osc);}
+button:disabled{opacity:.55;cursor:not-allowed;}
+.badge{
+  display:inline-block; padding:4px 10px; border-radius:999px;
+  border:1px solid var(--border-soft); color:var(--muted); font-size:12px;
+}
+.small{font-size:12px;color:var(--muted);}
+.ok{color:var(--success);font-weight:800;}
+.err{color:var(--danger);font-weight:800;}
+.warn{color:var(--warn);font-weight:800;}
+.info{color:var(--info);font-weight:800;}
+
+.app{max-width:1250px;margin:0 auto;}
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;margin-bottom:14px;flex-wrap:wrap;
+}
+.pillrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.grid{
+  display:grid;
+  grid-template-columns: 420px 1fr;
+  gap:14px;
+}
+@media (max-width: 980px){ .grid{grid-template-columns:1fr;} }
+.panel{
+  background:rgba(23,24,43,.75);
+  border:1px solid var(--border-soft);
+  border-radius:16px;
+  padding:14px;
+  box-shadow:0 18px 40px rgba(0,0,0,.4);
+}
+.panel h3{margin:0 0 10px 0;color:var(--violeta);}
+hr{border:0;border-top:1px solid var(--border-soft);margin:12px 0;}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.col{flex:1;min-width:160px;}
+
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+@media (max-width: 980px){ .kpis{grid-template-columns:repeat(2,1fr);} }
+.kpi{
+  background:rgba(5,6,23,.35);
+  border:1px solid var(--border-soft);
+  border-radius:14px;
+  padding:12px;
+}
+.kpi .lbl{font-size:12px;color:var(--muted);font-weight:800;}
+.kpi .val{font-size:20px;font-weight:950;margin-top:6px;}
+.kpi .hint{font-size:12px;color:var(--muted);margin-top:4px;}
+
+.list{display:flex;flex-direction:column;gap:10px;}
+.item{
+  background:rgba(5,6,23,.35);
+  border:1px solid var(--border-soft);
+  border-radius:14px;
+  padding:12px;
+}
+.item b{color:var(--text);}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;}
+.btnMini{padding:10px 12px;border-radius:10px;font-weight:900;}
+.btnGhost{background:transparent;border:1px solid var(--border-soft);color:var(--text);}
+.btnGhost:hover{background:rgba(167,139,250,.10);}
+.btnDanger{background:transparent;border:1px solid rgba(248,113,113,.65);color:#ffd8d8;}
+.btnDanger:hover{border-color:rgba(248,113,113,1);}
+code{color:#fff;}
+
+.tablelike{
+  width:100%;
+  border:1px solid var(--border-soft);
+  border-radius:14px;
+  overflow:hidden;
+}
+.tablelike .tr{
+  display:grid;
+  grid-template-columns: 1fr 120px 120px 120px 90px;
+  gap:10px;
+  padding:10px 12px;
+  border-bottom:1px solid rgba(167,139,250,.18);
+}
+.tablelike .tr:last-child{border-bottom:0;}
+.tablelike .th{
+  background:rgba(5,6,23,.45);
+  color:var(--muted);
+  font-size:12px;
+  font-weight:800;
+}
+.pill{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:6px 10px; border-radius:999px;
+  border:1px solid var(--border-soft);
+  background:rgba(5,6,23,.25);
+  color:var(--muted);
+  font-size:12px;
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+
+  <!-- LOGIN -->
+  <div id="login" class="card" style="max-width:480px;margin:40px auto;">
+    <h1>Dashboard Super Admin</h1>
+    <p>Ingreso (solo rol <b>super_admin</b>)</p>
+
+    <label>Correo</label>
+    <input id="email" type="email" placeholder="correo@dico.com.co" autocomplete="username" />
+
+    <label>Contraseña</label>
+    <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+
+    <div class="row" style="margin-top:14px;">
+      <button id="btnLogin" type="button" style="width:100%;">Ingresar</button>
+    </div>
+
+    <div id="loginMsg" class="small" style="margin-top:10px;text-align:center;"></div>
+  </div>
+
+  <!-- APP -->
+  <div id="app" class="hidden">
+    <div class="topbar">
+      <div>
+        <h1 style="margin:0;">Dashboard – Asistencia</h1>
+        <div class="small" id="whoami">—</div>
+      </div>
+      <div class="pillrow">
+        <span class="badge" id="roleBadge">rol</span>
+        <span class="pill" id="pillStatus">Listo</span>
+        <button id="btnReload" class="btnMini btnGhost" type="button">Actualizar</button>
+        <button id="btnLogout" class="btnMini btnDanger" type="button">Cerrar sesión</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <!-- LEFT: filtros + lista sesiones -->
+      <div class="panel">
+        <h3>Sesiones</h3>
+        <div class="small">Filtra y entra a una sesión.</div>
+        <hr/>
+
+        <label>Buscar (entrenamiento/ciudad/formador)</label>
+        <input id="fSearch" placeholder="Ej: alturas, bogotá, juan..." />
+
+        <div class="row">
+          <div class="col">
+            <label>Entrenamiento</label>
+            <select id="fTraining"><option value="">Todos</option></select>
+          </div>
+          <div class="col">
+            <label>Estado</label>
+            <select id="fState">
+              <option value="">Todos</option>
+              <option value="programada">programada</option>
+              <option value="en_curso">en_curso</option>
+              <option value="cerrada">cerrada</option>
+              <option value="cancelada">cancelada</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col">
+            <label>Ciudad</label>
+            <input id="fCity" placeholder="Bogotá" />
+          </div>
+          <div class="col">
+            <label>Formador</label>
+            <select id="fTrainer"><option value="">Todos</option></select>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col">
+            <label>Fecha desde</label>
+            <input id="fFrom" type="date" />
+          </div>
+          <div class="col">
+            <label>Fecha hasta</label>
+            <input id="fTo" type="date" />
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:12px;">
+          <button id="btnApply" class="btnMini" type="button" style="flex:1;">Aplicar</button>
+          <button id="btnClear" class="btnMini btnGhost" type="button" style="flex:1;">Limpiar</button>
+        </div>
+
+        <hr/>
+        <div id="sessionsList" class="list">
+          <div class="small">Cargando...</div>
+        </div>
+      </div>
+
+      <!-- RIGHT: detalle sesión -->
+      <div class="panel">
+        <h3>Detalle de sesión</h3>
+        <div class="small" id="sessionMeta">Selecciona una sesión a la izquierda.</div>
+
+        <hr/>
+        <div class="kpis">
+          <div class="kpi"><div class="lbl">Citados (total)</div><div class="val" id="kCited">—</div><div class="hint" id="kCitedHint"></div></div>
+          <div class="kpi"><div class="lbl">Fechas (session_dates)</div><div class="val" id="kDates">—</div><div class="hint"></div></div>
+          <div class="kpi"><div class="lbl">Asistencias (sum)</div><div class="val" id="kYes">—</div><div class="hint">Tarde cuenta como asistió</div></div>
+          <div class="kpi"><div class="lbl">% asistencia (promedio)</div><div class="val" id="kPct">—</div><div class="hint">Promedio por fecha</div></div>
+        </div>
+
+        <hr/>
+        <div class="row">
+          <div class="col">
+            <label>Fecha (para tabla detallada)</label>
+            <select id="datePick"><option value="">—</option></select>
+          </div>
+          <div class="col" style="min-width:220px;">
+            <label>&nbsp;</label>
+            <div class="row">
+              <button id="btnCsvDate" class="btnMini btnGhost" type="button" style="flex:1;">CSV (fecha)</button>
+              <button id="btnCsvAll" class="btnMini btnGhost" type="button" style="flex:1;">CSV (todas)</button>
+            </div>
+          </div>
+        </div>
+
+        <hr/>
+        <b>Resumen por fecha</b>
+        <div class="small">Basado en <code>attendance_dates</code> y citaciones.</div>
+
+        <div class="tablelike" style="margin-top:10px;" id="summaryByDate">
+          <div class="tr th">
+            <div>Fecha</div><div>Citados</div><div>Asistieron</div><div>No asistieron</div><div>%</div>
+          </div>
+        </div>
+
+        <hr/>
+        <b>Detalle por empleado (fecha seleccionada)</b>
+        <div class="small">Muestra empleados citados y su estado en esa fecha.</div>
+
+        <div class="tablelike" style="margin-top:10px;" id="detailTable">
+          <div class="tr th">
+            <div>Empleado</div><div>Documento</div><div>Estado</div><div>Asistió</div><div>Obs.</div>
+          </div>
+        </div>
+
+        <div class="small" style="margin-top:10px;" id="rightMsg"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =======================
+   CONFIG SUPABASE
+======================= */
+const SUPABASE_URL = "https://bqlltjronzrlgbjjntes.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_j84bjNzsEw1O-zsvliQ4Wg_BhGkSqR_";
+
+/* =======================
+   HELPERS
+======================= */
+const $ = (id)=>document.getElementById(id);
+const esc = (s)=>String(s ?? "")
+  .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+  .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+
+function setPill(txt, cls){
+  const p = $("pillStatus");
+  p.textContent = txt;
+  p.style.borderColor = cls==="ok" ? "rgba(52,211,153,.55)" : cls==="err" ? "rgba(249,115,115,.6)" : "var(--border-soft)";
+}
+
+function downloadTextFile(content, filename, mime){
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 600);
+}
+
+/* =======================
+   SUPABASE CLIENT
+======================= */
+function getSB(){
+  if(!window.supabase?.createClient) throw new Error("No se cargó Supabase JS.");
+  window.__sb = window.__sb || window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY,
+    { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true } }
+  );
+  return window.__sb;
+}
+
+/* =======================
+   STATE
+======================= */
+let STATE = {
+  user:null,
+  profile:null,
+  sessions:[],
+  trainings:[],
+  trainers:[],
+  selectedSessionId:null,
+  selectedSession:null,
+  sessionDates:[],      // array of {fecha}
+  citations:[],         // array of {employee_id, employees{documento,nombre}}
+  attendanceByDate: new Map(), // fecha -> Map(employee_id -> {asistio, estado})
+};
+
+/* =======================
+   AUTH / PROFILE
+======================= */
+async function getProfile(user){
+  const sb = getSB();
+  const { data, error } = await sb
+    .from("profiles")
+    .select("user_id,nombre,rol,activo")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if(error) throw error;
+  return data || null;
+}
+
+async function doLogin(){
+  const sb = getSB();
+  const email = ($("email").value || "").trim();
+  const password = ($("password").value || "").trim();
+  const msg = $("loginMsg");
+
+  msg.innerHTML = "";
+  if(!email || !password){
+    msg.innerHTML = `<span class="err">Debes ingresar correo y contraseña.</span>`;
+    return;
+  }
+
+  $("btnLogin").disabled = true;
+  msg.innerHTML = `<span class="small">Ingresando...</span>`;
+
+  try{
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if(error) throw error;
+    if(!data?.session) throw new Error("No se obtuvo sesión.");
+    await boot();
+  }catch(e){
+    msg.innerHTML = `<span class="err">${esc(e.message || e)}</span>`;
+  }finally{
+    $("btnLogin").disabled = false;
+  }
+}
+
+async function doLogout(){
+  const sb = getSB();
+  await sb.auth.signOut();
+  location.reload();
+}
+
+async function boot(){
+  const sb = getSB();
+  const { data:{ session } } = await sb.auth.getSession();
+
+  if(!session){
+    $("login").classList.remove("hidden");
+    $("app").classList.add("hidden");
+    return;
+  }
+
+  STATE.user = session.user;
+  STATE.profile = await getProfile(session.user);
+
+  if(!STATE.profile){
+    $("loginMsg").innerHTML = `<span class="err">No existe tu fila en profiles.</span>`;
+    await doLogout();
+    return;
+  }
+  if(STATE.profile.rol !== "super_admin"){
+    $("loginMsg").innerHTML = `<span class="err">Acceso denegado. Tu rol es: ${esc(STATE.profile.rol)}</span>`;
+    await doLogout();
+    return;
+  }
+
+  $("login").classList.add("hidden");
+  $("app").classList.remove("hidden");
+
+  $("whoami").textContent = `${STATE.user.email} · ${STATE.profile.nombre || ""} · uid: ${STATE.user.id}`;
+  $("roleBadge").textContent = STATE.profile.rol;
+  $("btnLogout").onclick = doLogout;
+  $("btnReload").onclick = initData;
+
+  $("btnApply").onclick = loadSessions;
+  $("btnClear").onclick = clearFilters;
+
+  $("datePick").onchange = () => renderDetailForSelectedDate();
+
+  $("btnCsvDate").onclick = exportCsvSelectedDate;
+  $("btnCsvAll").onclick = exportCsvAllDates;
+
+  await initData();
+}
+
+/* =======================
+   DATA LOADERS
+======================= */
+async function initData(){
+  setPill("Cargando…", "info");
+  await Promise.all([
+    loadTrainings(),
+    loadTrainers()
+  ]);
+  await loadSessions();
+  setPill("Listo", "ok");
+}
+
+async function loadTrainings(){
+  const sb = getSB();
+  const { data, error } = await sb
+    .from("trainings")
+    .select("id,nombre")
+    .order("nombre", { ascending:true });
+  if(error) throw error;
+  STATE.trainings = data || [];
+
+  const sel = $("fTraining");
+  sel.innerHTML = `<option value="">Todos</option>` + STATE.trainings
+    .map(t => `<option value="${esc(t.id)}">${esc(t.nombre)}</option>`).join("");
+}
+
+async function loadTrainers(){
+  const sb = getSB();
+  const { data, error } = await sb
+    .from("profiles")
+    .select("user_id,nombre,rol,activo")
+    .eq("activo", true)
+    .order("nombre", { ascending:true });
+  if(error) throw error;
+
+  STATE.trainers = (data || []).filter(p => p.rol === "formador");
+
+  const sel = $("fTrainer");
+  sel.innerHTML = `<option value="">Todos</option>` + STATE.trainers
+    .map(p => `<option value="${esc(p.user_id)}">${esc(p.nombre)}</option>`).join("");
+}
+
+function clearFilters(){
+  $("fSearch").value = "";
+  $("fTraining").value = "";
+  $("fCity").value = "";
+  $("fTrainer").value = "";
+  $("fState").value = "";
+  $("fFrom").value = "";
+  $("fTo").value = "";
+  loadSessions();
+}
+
+async function loadSessions(){
+  const sb = getSB();
+  $("sessionsList").innerHTML = `<div class="small">Cargando sesiones...</div>`;
+  setPill("Cargando sesiones…", "info");
+
+  const search = ($("fSearch").value || "").trim().toLowerCase();
+  const training_id = $("fTraining").value || "";
+  const ciudad = ($("fCity").value || "").trim().toLowerCase();
+  const formador = $("fTrainer").value || "";
+  const estado = $("fState").value || "";
+  const from = $("fFrom").value || "";
+  const to = $("fTo").value || "";
+
+  // Query base (trae trainings anidado si existe FK)
+  let q = sb.from("sessions")
+    .select("id,training_id,fecha,ciudad,formador_user_id,estado, trainings(nombre)")
+    .order("fecha", { ascending:false })
+    .limit(300);
+
+  if(training_id) q = q.eq("training_id", training_id);
+  if(formador) q = q.eq("formador_user_id", formador);
+  if(estado) q = q.eq("estado", estado);
+  if(from) q = q.gte("fecha", from);
+  if(to) q = q.lte("fecha", to);
+
+  const { data, error } = await q;
+  if(error){
+    $("sessionsList").innerHTML = `<div class="small"><span class="err">Error:</span> ${esc(error.message)}</div>`;
+    setPill("Error", "err");
+    return;
+  }
+
+  let sessions = data || [];
+
+  // filtro cliente (ciudad + search)
+  sessions = sessions.filter(s => {
+    const trName = (s.trainings?.nombre || "").toLowerCase();
+    const city = (s.ciudad || "").toLowerCase();
+    const st = (s.estado || "").toLowerCase();
+    const trainerName = (STATE.trainers.find(t => t.user_id === s.formador_user_id)?.nombre || "").toLowerCase();
+
+    if(ciudad && !city.includes(ciudad)) return false;
+
+    if(search){
+      const hay = `${trName} ${city} ${trainerName} ${st} ${s.fecha || ""}`.toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  STATE.sessions = sessions;
+
+  renderSessionsList();
+  setPill("Listo", "ok");
+}
+
+function renderSessionsList(){
+  const cont = $("sessionsList");
+  const sessions = STATE.sessions;
+
+  if(!sessions.length){
+    cont.innerHTML = `<div class="item"><div class="small">No hay sesiones con esos filtros.</div></div>`;
+    return;
+  }
+
+  cont.innerHTML = sessions.map(s => {
+    const trName = s.trainings?.nombre || "(sin nombre)";
+    const trainerName = STATE.trainers.find(t => t.user_id === s.formador_user_id)?.nombre || "(sin formador)";
+    const isSel = (STATE.selectedSessionId === s.id);
+
+    return `
+      <div class="item" style="${isSel ? "border-color: rgba(52,211,153,.6)" : ""}">
+        <div class="row" style="justify-content:space-between;">
+          <b>${esc(trName)}</b>
+          <span class="pill">${esc(s.estado || "—")}</span>
+        </div>
+        <div class="small" style="margin-top:6px;">
+          ${esc(s.fecha)} · ${esc(s.ciudad || "")}
+        </div>
+        <div class="small" style="margin-top:4px;">
+          Formador: <span class="info">${esc(trainerName)}</span>
+        </div>
+        <div class="actions">
+          <button class="btnMini btnGhost" type="button" onclick="selectSession('${esc(s.id)}')">Abrir</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+/* =======================
+   SESSION DETAIL
+======================= */
+window.selectSession = async (session_id) => {
+  STATE.selectedSessionId = session_id;
+  STATE.selectedSession = STATE.sessions.find(s => s.id === session_id) || null;
+
+  $("sessionMeta").innerHTML = `Cargando detalle...`;
+  $("rightMsg").textContent = "";
+  setPill("Cargando sesión…", "info");
+
+  try{
+    await Promise.all([
+      loadSessionDates(session_id),
+      loadCitations(session_id),
+    ]);
+    await loadAttendanceForAllDates(session_id);
+
+    renderSessionDetail();
+    setPill("Listo", "ok");
+    renderSessionsList();
+  }catch(e){
+    $("sessionMeta").innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
+    setPill("Error", "err");
+  }
+};
+
+async function loadSessionDates(session_id){
+  const sb = getSB();
+  const { data, error } = await sb
+    .from("session_dates")
+    .select("fecha")
+    .eq("session_id", session_id)
+    .order("fecha", { ascending:true });
+  if(error) throw error;
+  STATE.sessionDates = (data || []).filter(x => x.fecha);
+}
+
+async function loadCitations(session_id){
+  const sb = getSB();
+  const { data, error } = await sb
+    .from("citations")
+    .select("employee_id, employees(documento,nombre,cargo,area,estado)")
+    .eq("session_id", session_id);
+  if(error) throw error;
+  STATE.citations = data || [];
+}
+
+async function loadAttendanceForAllDates(session_id){
+  const sb = getSB();
+  STATE.attendanceByDate = new Map();
+
+  const fechas = STATE.sessionDates.map(d => d.fecha);
+  const empIds = STATE.citations.map(c => c.employee_id).filter(Boolean);
+
+  // si no hay nada, deja vacío
+  if(!fechas.length || !empIds.length) return;
+
+  // Nota: si tienes muchísimos citados y muchas fechas, esto puede crecer.
+  // Para tus volúmenes típicos de sesión, funciona bien.
+  const { data, error } = await sb
+    .from("attendance_dates")
+    .select("session_date, employee_id, asistio, estado")
+    .eq("session_id", session_id)
+    .in("session_date", fechas)
+    .in("employee_id", empIds);
+
+  if(error) throw error;
+
+  for(const row of (data || [])){
+    const f = row.session_date;
+    if(!STATE.attendanceByDate.has(f)) STATE.attendanceByDate.set(f, new Map());
+    STATE.attendanceByDate.get(f).set(row.employee_id, { asistio: row.asistio, estado: row.estado || null });
+  }
+}
+
+function renderSessionDetail(){
+  const s = STATE.selectedSession;
+  if(!s){
+    $("sessionMeta").textContent = "Selecciona una sesión.";
+    return;
+  }
+
+  const trName = s.trainings?.nombre || "(sin nombre)";
+  const trainerName = STATE.trainers.find(t => t.user_id === s.formador_user_id)?.nombre || "(sin formador)";
+
+  $("sessionMeta").innerHTML = `
+    <span class="badge">session_id: <code>${esc(s.id)}</code></span>
+    <div class="small" style="margin-top:8px;">
+      <b>${esc(trName)}</b> · ${esc(s.fecha)} · ${esc(s.ciudad || "")} · Formador: <span class="info">${esc(trainerName)}</span>
+    </div>
+  `;
+
+  const citedTotal = STATE.citations.length;
+  const datesTotal = STATE.sessionDates.length;
+
+  // resumen por fecha
+  const rows = [];
+  let sumYes = 0;
+  let sumPct = 0;
+
+  for(const d of STATE.sessionDates){
+    const fecha = d.fecha;
+    const map = STATE.attendanceByDate.get(fecha) || new Map();
+
+    let yes = 0;
+    for(const c of STATE.citations){
+      const rec = map.get(c.employee_id);
+      if(rec && rec.asistio === true) yes++;
+    }
+    const no = citedTotal - yes;
+    const pct = citedTotal ? (yes / citedTotal) * 100 : 0;
+
+    sumYes += yes;
+    sumPct += pct;
+
+    rows.push({ fecha, cited: citedTotal, yes, no, pct });
+  }
+
+  const avgPct = datesTotal ? (sumPct / datesTotal) : 0;
+
+  $("kCited").textContent = citedTotal.toString();
+  $("kCitedHint").textContent = citedTotal ? "Basado en citations" : "";
+  $("kDates").textContent = datesTotal.toString();
+  $("kYes").textContent = sumYes.toString();
+  $("kPct").textContent = `${avgPct.toFixed(1)}%`;
+
+  // pick de fechas
+  const dp = $("datePick");
+  dp.innerHTML = `<option value="">—</option>` + STATE.sessionDates
+    .map(d => `<option value="${esc(d.fecha)}">${esc(d.fecha)}</option>`).join("");
+
+  // tabla resumen
+  const sum = $("summaryByDate");
+  sum.innerHTML = `
+    <div class="tr th">
+      <div>Fecha</div><div>Citados</div><div>Asistieron</div><div>No asistieron</div><div>%</div>
+    </div>
+  ` + rows.map(r => `
+    <div class="tr">
+      <div><b>${esc(r.fecha)}</b></div>
+      <div>${r.cited}</div>
+      <div class="${r.yes ? "ok":""}">${r.yes}</div>
+      <div class="${r.no ? "warn":""}">${r.no}</div>
+      <div><b>${r.pct.toFixed(1)}%</b></div>
+    </div>
+  `).join("");
+
+  // detalle vacío hasta elegir fecha
+  renderDetailEmpty();
+}
+
+function renderDetailEmpty(){
+  const dt = $("detailTable");
+  dt.innerHTML = `
+    <div class="tr th">
+      <div>Empleado</div><div>Documento</div><div>Estado</div><div>Asistió</div><div>Obs.</div>
+    </div>
+    <div class="tr">
+      <div class="small"><span class="warn">Selecciona una fecha arriba para ver el detalle.</span></div>
+      <div></div><div></div><div></div><div></div>
+    </div>
+  `;
+}
+
+function renderDetailForSelectedDate(){
+  const fecha = $("datePick").value || "";
+  if(!fecha){
+    renderDetailEmpty();
+    return;
+  }
+
+  const cited = STATE.citations;
+  const map = STATE.attendanceByDate.get(fecha) || new Map();
+
+  const dt = $("detailTable");
+  dt.innerHTML = `
+    <div class="tr th">
+      <div>Empleado</div><div>Documento</div><div>Estado</div><div>Asistió</div><div>Obs.</div>
+    </div>
+  `;
+
+  if(!cited.length){
+    dt.innerHTML += `
+      <div class="tr"><div class="small">No hay citados.</div><div></div><div></div><div></div><div></div></div>
+    `;
+    return;
+  }
+
+  // orden por nombre
+  const sorted = [...cited].sort((a,b)=>{
+    const na = (a.employees?.nombre || "").toLowerCase();
+    const nb = (b.employees?.nombre || "").toLowerCase();
+    return na.localeCompare(nb);
+  });
+
+  for(const c of sorted){
+    const emp = c.employees || {};
+    const rec = map.get(c.employee_id) || null;
+    const asistio = rec ? rec.asistio : null;
+    const estado = rec ? (rec.estado || "") : "";
+
+    const asistioTxt = (asistio === true) ? "Sí" : (asistio === false) ? "No" : "—";
+    const estadoTxt = estado || "—";
+    const obs = (estado === "tarde") ? "Tarde" : "";
+
+    dt.innerHTML += `
+      <div class="tr">
+        <div>${esc(emp.nombre || "")}</div>
+        <div>${esc(emp.documento || "")}</div>
+        <div>${esc(estadoTxt)}</div>
+        <div class="${asistio === true ? "ok" : asistio === false ? "warn" : ""}">${esc(asistioTxt)}</div>
+        <div class="small">${esc(obs)}</div>
+      </div>
+    `;
+  }
+}
+
+/* =======================
+   EXPORT CSV
+======================= */
+function csvLine(values){
+  return values.map(v=>{
+    const s = String(v ?? "");
+    const needs = /[",\n;]/.test(s);
+    const cleaned = s.replaceAll('"','""');
+    return needs ? `"${cleaned}"` : cleaned;
+  }).join(",");
+}
+
+function exportCsvSelectedDate(){
+  const fecha = $("datePick").value || "";
+  if(!STATE.selectedSessionId || !fecha){
+    $("rightMsg").innerHTML = `<span class="warn">Selecciona sesión y fecha.</span>`;
+    return;
+  }
+  const csv = buildCsvForDates([fecha]);
+  const name = `asistencia_${STATE.selectedSessionId}_${fecha}.csv`;
+  downloadTextFile(csv, name, "text/csv;charset=utf-8");
+  $("rightMsg").innerHTML = `<span class="ok">CSV generado:</span> ${esc(name)}`;
+}
+
+function exportCsvAllDates(){
+  if(!STATE.selectedSessionId){
+    $("rightMsg").innerHTML = `<span class="warn">Selecciona una sesión.</span>`;
+    return;
+  }
+  const fechas = STATE.sessionDates.map(d=>d.fecha);
+  if(!fechas.length){
+    $("rightMsg").innerHTML = `<span class="warn">La sesión no tiene fechas.</span>`;
+    return;
+  }
+  const csv = buildCsvForDates(fechas);
+  const name = `asistencia_${STATE.selectedSessionId}_todas_fechas.csv`;
+  downloadTextFile(csv, name, "text/csv;charset=utf-8");
+  $("rightMsg").innerHTML = `<span class="ok">CSV generado:</span> ${esc(name)}`;
+}
+
+function buildCsvForDates(fechas){
+  const header = [
+    "session_id","session_date",
+    "employee_id","documento","nombre","cargo","area",
+    "asistio","estado"
+  ];
+
+  const lines = [csvLine(header)];
+
+  const cited = STATE.citations;
+  for(const fecha of fechas){
+    const map = STATE.attendanceByDate.get(fecha) || new Map();
+
+    for(const c of cited){
+      const emp = c.employees || {};
+      const rec = map.get(c.employee_id) || null;
+
+      const asistio = rec ? rec.asistio : "";
+      const estado = rec ? (rec.estado || "") : "";
+
+      lines.push(csvLine([
+        STATE.selectedSessionId,
+        fecha,
+        c.employee_id,
+        emp.documento || "",
+        emp.nombre || "",
+        emp.cargo || "",
+        emp.area || "",
+        asistio,
+        estado
+      ]));
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/* =======================
+   INIT
+======================= */
+document.addEventListener("DOMContentLoaded", async ()=>{
+  try{
+    $("btnLogin").onclick = doLogin;
+    $("password").addEventListener("keydown",(e)=>{ if(e.key==="Enter") doLogin(); });
+    $("email").addEventListener("keydown",(e)=>{ if(e.key==="Enter") doLogin(); });
+    await boot();
+  }catch(e){
+    $("loginMsg").innerHTML = `<span class="err">${esc(e.message || e)}</span>`;
+  }
+});
+</script>
+</body>
+</html>
