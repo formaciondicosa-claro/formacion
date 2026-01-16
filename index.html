@@ -1712,17 +1712,19 @@ document.addEventListener("DOMContentLoaded", async () => {
       $("resetMsg").innerHTML = `<span class="small">Ingresa tu nueva contraseña.</span>`;
       return;
     }
-
+  try{
     await bootApp();
- }catch(e){
-  $("loginMsg").innerHTML = '<span class="err">' + esc(e.message || e) + '</span>';
-  setLog(e);
-}
+  }catch(e){
+    $("loginMsg").innerHTML = '<span class="err">' + esc(e.message || e) + '</span>';
+    setLog(e);
+  }
 });
 </script>
 
 </body>
 </html>
+
+
 
 
 
