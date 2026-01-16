@@ -1405,7 +1405,8 @@ async function adminUploadCitations(){
 
 /* =========================================================
    FORMADOR (FIX: attendance_dates requiere session_id NOT NULL)
-   Usamos Opción B: attendance_dates(session_id, employee_id, fecha, asistio)
+   Usamos Opción B: attendance_dates(session_id, employee_id, session_date, asistio)
+   OJO: tu columna real se llama session_date (NO "fecha")
 ========================================================= */
 function wireTrainerHandlers(){
   $("btnRefreshTrainer").onclick = trainerInit;
@@ -1561,12 +1562,12 @@ async function trainerLoadCitadosInto(session_id){
 
     const empIds = cit.map(c => c.employee_id);
 
-    // asistencia SOLO para la fecha seleccionada (Opción B)
+    // ====== FIX: aquí usabas "fecha", pero tu columna real es "session_date" ======
     const { data: at, error: e2 } = await sb
       .from("attendance_dates")
       .select("employee_id, asistio")
       .eq("session_id", session_id)
-      .eq("fecha", fechaSeleccionada)
+      .eq("session_date", fechaSeleccionada)
       .in("employee_id", empIds);
 
     if(e2) throw e2;
@@ -1584,14 +1585,14 @@ async function trainerLoadCitadosInto(session_id){
     const allFechas = (datesAll || []).map(d => d.fecha).filter(Boolean);
     const totalDays = allFechas.length || 0;
 
-    // asistencias true para todas las fechas (Opción B)
+    // ====== FIX: aquí usabas "fecha", pero tu columna real es "session_date" ======
     let trueMap = new Map(); // employee_id -> count true
     if(allFechas.length){
       const { data: atAll, error: e4 } = await sb
         .from("attendance_dates")
-        .select("employee_id, asistio, fecha")
+        .select("employee_id, asistio, session_date")
         .eq("session_id", session_id)
-        .in("fecha", allFechas)
+        .in("session_date", allFechas)
         .in("employee_id", empIds);
 
       if(e4) throw e4;
@@ -1644,14 +1645,17 @@ async function trainerLoadCitadosInto(session_id){
   }
 }
 
-/* FIX PRINCIPAL: ahora SIEMPRE enviamos session_id + fecha (no session_date_id) */
+/* =========================================================
+   FIX PRINCIPAL: UPSERT con session_id + employee_id + session_date
+   (tu columna REAL es session_date, no "fecha")
+========================================================= */
 window.trainerMark = async (session_id, employee_id, fecha, asistio) => {
   const sb = getSB();
   setStatus("Guardando asistencia...");
 
   session_id = (session_id ?? "").toString().trim();
   employee_id = (employee_id ?? "").toString().trim();
-  fecha = (fecha ?? "").toString().trim();
+  fecha = (fecha ?? "").toString().trim(); // ISO YYYY-MM-DD
 
   if(!session_id){
     setStatus(`<span class="err">Error:</span> session_id vacío. Recarga la sesión y vuelve a intentar.`);
@@ -1670,12 +1674,21 @@ window.trainerMark = async (session_id, employee_id, fecha, asistio) => {
   }
 
   try{
-    const payload = { session_id, employee_id, fecha, asistio: !!asistio };
+    // ====== FIX: payload con session_date (NO "fecha") y session_id siempre ======
+    const payload = {
+      session_id,
+      employee_id,
+      session_date: fecha,
+      asistio: !!asistio
+      // session_date_id: null // opcional, no requerido
+    };
+
     setLog({ attendance_dates_upsert_payload: payload });
 
+    // ====== FIX: onConflict con session_date (tu unique real) ======
     const { error } = await sb
       .from("attendance_dates")
-      .upsert(payload, { onConflict: "session_id,employee_id,fecha" });
+      .upsert(payload, { onConflict: "session_id,employee_id,session_date" });
 
     if(error) throw error;
 
