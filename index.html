@@ -865,6 +865,7 @@ async function adminLoadFormadores(){
     .join("");
 }
 
+/* ✅ CAMBIO: Traer trainings(nombre) para mostrarlo en admin */
 async function adminLoadSessions(){
   const sb = getSB();
   const cont = $("adminSessions");
@@ -872,7 +873,7 @@ async function adminLoadSessions(){
 
   const { data, error } = await sb
     .from("sessions")
-    .select(`id, training_id, fecha, ciudad, formador_user_id, estado, created_at`)
+    .select(`id, training_id, fecha, ciudad, formador_user_id, estado, created_at, trainings ( nombre )`)
     .order("fecha", { ascending:false })
     .limit(50);
 
@@ -888,26 +889,26 @@ async function adminLoadSessions(){
     return;
   }
 
-  cont.innerHTML = data.map(s => `
-    <div class="item">
-      <div class="row" style="justify-content:space-between;">
-        <div><b>Sesión</b></div>
-        <span class="chip">${esc(s.estado || "—")}</span>
+  cont.innerHTML = data.map(s => {
+    const trName = s.trainings?.nombre || "Entrenamiento";
+    return `
+      <div class="item">
+        <div class="row" style="justify-content:space-between;">
+          <div><b>${esc(trName)}</b></div>
+          <span class="chip">${esc(s.estado || "—")}</span>
+        </div>
+        <div class="small" style="margin-top:6px;">Sesión · ${esc(s.fecha)} · ${esc(s.ciudad || "")}</div>
+        <div class="kv">
+          <div>session_id</div><div><code>${esc(s.id)}</code></div>
+          <div>training_id</div><div><code>${esc(s.training_id || "")}</code></div>
+          <div>formador_user_id</div><div><code>${esc(s.formador_user_id || "")}</code></div>
+        </div>
+        <div class="actions">
+          <button class="btnMini btnDanger" type="button" onclick="adminDeleteSession('${s.id}')">Eliminar sesión</button>
+        </div>
       </div>
-      <div class="small" style="margin-top:6px;">
-  <b>${esc(s.trainings?.nombre || "Entrenamiento")}</b><br>
-  Sesión · ${esc(s.fecha)} · ${esc(s.ciudad || "")}
-</div>
-      <div class="kv">
-        <div>session_id</div><div><code>${esc(s.id)}</code></div>
-        <div>training_id</div><div><code>${esc(s.training_id || "")}</code></div>
-        <div>formador_user_id</div><div><code>${esc(s.formador_user_id || "")}</code></div>
-      </div>
-      <div class="actions">
-        <button class="btnMini btnDanger" type="button" onclick="adminDeleteSession('${s.id}')">Eliminar sesión</button>
-      </div>
-    </div>
-  `).join("");
+    `;
+  }).join("");
 }
 
 async function adminLoadSessionSelects(){
@@ -917,7 +918,7 @@ async function adminLoadSessionSelects(){
 
   const { data, error } = await sb
     .from("sessions")
-    .select(`id,fecha,ciudad,estado`)
+    .select(`id,fecha,ciudad,estado, trainings ( nombre )`)
     .order("fecha", { ascending:false })
     .limit(150);
 
@@ -934,7 +935,8 @@ async function adminLoadSessionSelects(){
   }
 
   sel.innerHTML = `<option value="">Selecciona sesión...</option>` + data.map(s => {
-    const tag = `${s.fecha} · ${s.ciudad || ""} · ${s.id}`;
+    const trName = s.trainings?.nombre || "Entrenamiento";
+    const tag = `${trName} · ${s.fecha} · ${s.ciudad || ""} · ${s.id}`;
     return `<option value="${s.id}">${esc(tag)}</option>`;
   }).join("");
 }
@@ -1129,8 +1131,6 @@ window.adminDeleteSession = async (session_id) => {
   setStatus(`Eliminando sesión <code>${esc(session_id)}</code>...`);
 
   try{
-    // IMPORTANTE: si usas Opción B (attendance_dates por session_id+fecha),
-    // primero borramos attendance_dates de esa sesión:
     let r = await sb.from("attendance_dates").delete().eq("session_id", session_id);
     if(r.error) throw r.error;
 
@@ -1407,9 +1407,7 @@ async function adminUploadCitations(){
 }
 
 /* =========================================================
-   FORMADOR (FIX: attendance_dates requiere session_id NOT NULL)
-   Usamos Opción B: attendance_dates(session_id, employee_id, session_date, asistio)
-   OJO: tu columna real se llama session_date (NO "fecha")
+   FORMADOR
 ========================================================= */
 function wireTrainerHandlers(){
   $("btnRefreshTrainer").onclick = trainerInit;
@@ -1419,6 +1417,7 @@ async function trainerInit(){
   await trainerLoadSessions();
 }
 
+/* ✅ CAMBIO: Traer trainings(nombre) y mostrarlo en la tarjeta */
 async function trainerLoadSessions(){
   const sb = getSB();
   const cont = $("trainerSessions");
@@ -1428,18 +1427,12 @@ async function trainerLoadSessions(){
     const { data: { user } } = await sb.auth.getUser();
     if(!user) throw new Error("No hay usuario autenticado.");
 
-   const { data: sessions, error } = await sb
-  .from("sessions")
-  .select(`
-    id,
-    fecha,
-    ciudad,
-    estado,
-    trainings ( nombre )
-  `)
-  .eq("formador_user_id", user.id)
-  .order("fecha", { ascending:false });
-
+    const { data: sessions, error } = await sb
+      .from("sessions")
+      .select(`id, fecha, ciudad, estado, training_id, trainings ( nombre )`)
+      .eq("formador_user_id", user.id)
+      .order("fecha", { ascending:false })
+      .limit(50);
 
     if(error) throw error;
 
@@ -1449,39 +1442,42 @@ async function trainerLoadSessions(){
       return;
     }
 
-    cont.innerHTML = sessions.map(s => `
-      <div class="item" id="sess_${s.id}">
-        <div class="row" style="justify-content:space-between;">
-          <div><b>Sesión</b></div>
-          <span class="chip">${esc(s.estado || "—")}</span>
-        </div>
-        <div class="small" style="margin-top:6px;">${esc(s.fecha)} · ${esc(s.ciudad || "")}</div>
-
-        <div class="row" style="margin-top:10px;">
-          <div class="col">
-            <label>Fecha a marcar</label>
-            <select class="dateSelect" data-session="${esc(s.id)}">
-              <option value="">Cargando fechas...</option>
-            </select>
+    cont.innerHTML = sessions.map(s => {
+      const trName = s.trainings?.nombre || "Entrenamiento";
+      return `
+        <div class="item" id="sess_${s.id}">
+          <div class="row" style="justify-content:space-between;">
+            <div><b>${esc(trName)}</b></div>
+            <span class="chip">${esc(s.estado || "—")}</span>
           </div>
-          <div class="col" style="min-width:170px;">
-            <label>&nbsp;</label>
-            <button class="btnMini btnGhost" type="button" onclick="trainerRefreshSession('${s.id}')">Recargar</button>
+          <div class="small" style="margin-top:6px;">Sesión · ${esc(s.fecha)} · ${esc(s.ciudad || "")}</div>
+
+          <div class="row" style="margin-top:10px;">
+            <div class="col">
+              <label>Fecha a marcar</label>
+              <select class="dateSelect" data-session="${esc(s.id)}">
+                <option value="">Cargando fechas...</option>
+              </select>
+            </div>
+            <div class="col" style="min-width:170px;">
+              <label>&nbsp;</label>
+              <button class="btnMini btnGhost" type="button" onclick="trainerRefreshSession('${s.id}')">Recargar</button>
+            </div>
+          </div>
+
+          <hr/>
+          <b>Citados</b>
+          <div class="small">Marca asistencia para la fecha seleccionada. Abajo verás avance por persona (X/N) y APTO.</div>
+
+          <div class="tablelike" style="margin-top:10px;">
+            <div class="tr th">
+              <div>Empleado</div><div>Asistió</div><div>No asistió</div>
+            </div>
+            <div class="tr"><div class="small">Cargando...</div><div></div><div></div></div>
           </div>
         </div>
-
-        <hr/>
-        <b>Citados</b>
-        <div class="small">Marca asistencia para la fecha seleccionada. Abajo verás avance por persona (X/N) y APTO.</div>
-
-        <div class="tablelike" style="margin-top:10px;">
-          <div class="tr th">
-            <div>Empleado</div><div>Asistió</div><div>No asistió</div>
-          </div>
-          <div class="tr"><div class="small">Cargando...</div><div></div><div></div></div>
-        </div>
-      </div>
-    `).join("");
+      `;
+    }).join("");
 
     for(const s of sessions){
       await trainerLoadDatesInto(s.id);
@@ -1535,7 +1531,6 @@ async function trainerLoadDatesInto(session_id){
   }
 }
 
-/* Tabla citados + asistencia por FECHA (Opción B) */
 async function trainerLoadCitadosInto(session_id){
   const sb = getSB();
   const sessBox = document.querySelector(`#sess_${CSS.escape(session_id)}`);
@@ -1571,7 +1566,7 @@ async function trainerLoadCitadosInto(session_id){
 
     const empIds = cit.map(c => c.employee_id);
 
-    // ====== FIX: aquí usabas "fecha", pero tu columna real es "session_date" ======
+    // asistencia SOLO para la fecha seleccionada
     const { data: at, error: e2 } = await sb
       .from("attendance_dates")
       .select("employee_id, asistio")
@@ -1594,7 +1589,7 @@ async function trainerLoadCitadosInto(session_id){
     const allFechas = (datesAll || []).map(d => d.fecha).filter(Boolean);
     const totalDays = allFechas.length || 0;
 
-    // ====== FIX: aquí usabas "fecha", pero tu columna real es "session_date" ======
+    // asistencias true para todas las fechas
     let trueMap = new Map(); // employee_id -> count true
     if(allFechas.length){
       const { data: atAll, error: e4 } = await sb
@@ -1654,47 +1649,34 @@ async function trainerLoadCitadosInto(session_id){
   }
 }
 
-/* =========================================================
-   FIX PRINCIPAL: UPSERT con session_id + employee_id + session_date
-   (tu columna REAL es session_date, no "fecha")
-========================================================= */
-window.trainerMark = async (session_id, employee_id, fecha, asistio) => {
+window.trainerMark = async (session_id, employee_id, session_date, asistio) => {
   const sb = getSB();
   setStatus("Guardando asistencia...");
 
   session_id = (session_id ?? "").toString().trim();
   employee_id = (employee_id ?? "").toString().trim();
-  fecha = (fecha ?? "").toString().trim(); // ISO YYYY-MM-DD
+  session_date = (session_date ?? "").toString().trim();
 
   if(!session_id){
     setStatus(`<span class="err">Error:</span> session_id vacío. Recarga la sesión y vuelve a intentar.`);
-    setLog({ error: "session_id vacío", session_id, employee_id, fecha, asistio });
+    setLog({ error: "session_id vacío", session_id, employee_id, session_date, asistio });
     return;
   }
   if(!employee_id){
     setStatus(`<span class="err">Error:</span> employee_id vacío.`);
-    setLog({ error: "employee_id vacío", session_id, employee_id, fecha, asistio });
+    setLog({ error: "employee_id vacío", session_id, employee_id, session_date, asistio });
     return;
   }
-  if(!fecha){
+  if(!session_date){
     setStatus(`<span class="err">Error:</span> Debes seleccionar una fecha.`);
-    setLog({ error: "fecha vacía", session_id, employee_id, fecha, asistio });
+    setLog({ error: "session_date vacío", session_id, employee_id, session_date, asistio });
     return;
   }
 
   try{
-    // ====== FIX: payload con session_date (NO "fecha") y session_id siempre ======
-    const payload = {
-      session_id,
-      employee_id,
-      session_date: fecha,
-      asistio: !!asistio
-      // session_date_id: null // opcional, no requerido
-    };
-
+    const payload = { session_id, employee_id, session_date, asistio: !!asistio };
     setLog({ attendance_dates_upsert_payload: payload });
 
-    // ====== FIX: onConflict con session_date (tu unique real) ======
     const { error } = await sb
       .from("attendance_dates")
       .upsert(payload, { onConflict: "session_id,employee_id,session_date" });
