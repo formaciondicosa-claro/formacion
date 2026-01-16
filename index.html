@@ -679,17 +679,10 @@ function renderAdminRight(){
   `;
 }
 
+/* ✅ OPCION A: se quita el bloque de Acciones del formador */
 function renderTrainerLeft(){
   return `
     <h3>Formador</h3>
-    <div class="small">Verás tus sesiones y marcarás asistencia por fecha real.</div>
-    <hr/>
-    <div class="item">
-      <b>Acciones</b>
-      <div class="actions">
-        <button id="btnRefreshTrainer" class="btnMini btnGhost" type="button">Actualizar</button>
-      </div>
-    </div>
   `;
 }
 
@@ -865,7 +858,7 @@ async function adminLoadFormadores(){
     .join("");
 }
 
-/* ✅ CAMBIO: Traer trainings(nombre) para mostrarlo en admin */
+/* Traer trainings(nombre) para mostrarlo */
 async function adminLoadSessions(){
   const sb = getSB();
   const cont = $("adminSessions");
@@ -1410,14 +1403,13 @@ async function adminUploadCitations(){
    FORMADOR
 ========================================================= */
 function wireTrainerHandlers(){
-  $("btnRefreshTrainer").onclick = trainerInit;
+  // Ya no hay botón "Actualizar", no hace falta wiring aquí.
 }
 
 async function trainerInit(){
   await trainerLoadSessions();
 }
 
-/* ✅ CAMBIO: Traer trainings(nombre) y mostrarlo en la tarjeta */
 async function trainerLoadSessions(){
   const sb = getSB();
   const cont = $("trainerSessions");
@@ -1566,7 +1558,6 @@ async function trainerLoadCitadosInto(session_id){
 
     const empIds = cit.map(c => c.employee_id);
 
-    // asistencia SOLO para la fecha seleccionada
     const { data: at, error: e2 } = await sb
       .from("attendance_dates")
       .select("employee_id, asistio")
@@ -1578,7 +1569,6 @@ async function trainerLoadCitadosInto(session_id){
 
     const attMap = new Map((at || []).map(a => [a.employee_id, a.asistio]));
 
-    // total fechas de la sesión
     const { data: datesAll, error: e3 } = await sb
       .from("session_dates")
       .select("fecha")
@@ -1589,8 +1579,7 @@ async function trainerLoadCitadosInto(session_id){
     const allFechas = (datesAll || []).map(d => d.fecha).filter(Boolean);
     const totalDays = allFechas.length || 0;
 
-    // asistencias true para todas las fechas
-    let trueMap = new Map(); // employee_id -> count true
+    let trueMap = new Map();
     if(allFechas.length){
       const { data: atAll, error: e4 } = await sb
         .from("attendance_dates")
@@ -1687,7 +1676,7 @@ window.trainerMark = async (session_id, employee_id, session_date, asistio) => {
     await trainerLoadCitadosInto(session_id);
 
   }catch(err){
-    setStatus(`<span class="err">Error guardando asistencia:</span> ${esc(err.message || err)}`);
+    setStatus(`<span class="err">Error guardando asistencia:</span> ${esc	ASSERT(err.message || err)}`);
     setLog(err);
   }
 };
@@ -1729,4 +1718,3 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
-
