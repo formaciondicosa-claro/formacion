@@ -1675,10 +1675,10 @@ window.trainerMark = async (session_id, employee_id, session_date, asistio) => {
     setStatus(`<span class="ok">Asistencia guardada.</span>`);
     await trainerLoadCitadosInto(session_id);
 
-  }catch(err){
-    setStatus(`<span class="err">Error guardando asistencia:</span> ${esc	ASSERT(err.message || err)}`);
-    setLog(err);
-  }
+ }catch(err){
+  setStatus('<span class="err">Error guardando asistencia:</span> ' + esc(err.message || err));
+  setLog(err);
+}
 };
 
 /* =========================================================
@@ -1718,3 +1718,4 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
+
