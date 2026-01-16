@@ -687,7 +687,13 @@ function renderAdminRight(){
     <hr/>
    <div class="row">
   <button id="btnRefreshAdmin" class="btnMini btnGhost" type="button">Actualizar</button>
-  <button id="btnOpenDashboard" class="btnMini" type="button">Ver Dashboard</button>
+  <a class="btnMini btnGhost"
+   href="./dashboard_super_admin.html"
+   target="_blank"
+   rel="noopener"
+   style="display:inline-block;text-decoration:none;text-align:center;">
+  Ver Dashboard
+</a>
 </div>
     <div id="adminSessions" class="list" style="margin-top:12px;"></div>
   `;
@@ -1298,6 +1304,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
+
 
 
 
