@@ -291,6 +291,34 @@ code{color:#fff;}
         </div>
 
         <div class="small" style="margin-top:10px;" id="rightMsg"></div>
+        <hr/>
+<b>Historial por colaborador</b>
+<div class="small">Consulta todas las asistencias registradas de un empleado (todas las sesiones y fechas).</div>
+
+<div class="row" style="margin-top:10px;">
+  <div class="col">
+    <label>Buscar por documento (recomendado)</label>
+    <input id="histDoc" placeholder="Ej: 1030123456" />
+  </div>
+  <div class="col">
+    <label>o por employee_id (uuid)</label>
+    <input id="histEmpId" placeholder="uuid del employee (si lo tienes)" />
+  </div>
+</div>
+
+<div class="row" style="margin-top:10px;">
+  <button id="btnHistBuscar" class="btnMini btnGhost" type="button">Buscar historial</button>
+  <button id="btnHistLimpiar" class="btnMini btnGhost" type="button">Limpiar</button>
+</div>
+
+<div class="small" style="margin-top:10px;" id="histMsg"></div>
+
+<div class="tablelike" style="margin-top:10px;" id="histTable">
+  <div class="tr th">
+    <div>Sesión / Entrenamiento</div><div>Fecha</div><div>Asistió</div><div>Estado</div><div>Ciudad</div>
+  </div>
+</div>
+
       </div>
     </div>
   </div>
@@ -440,6 +468,8 @@ $("btnBack").onclick = () => {
 
   $("btnApply").onclick = loadSessions;
   $("btnClear").onclick = clearFilters;
+  $("btnHistBuscar").onclick = buscarHistorialColaborador;
+$("btnHistLimpiar").onclick = limpiarHistorialColaborador;
 
   $("datePick").onchange = () => renderDetailForSelectedDate();
 
@@ -904,4 +934,5 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
