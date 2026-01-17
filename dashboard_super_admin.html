@@ -754,6 +754,14 @@ function renderSessionDetail(){
   const dp = $("datePick");
   dp.innerHTML = `<option value="">—</option>` + STATE.sessionDates
     .map(d => `<option value="${esc(d.fecha)}">${esc(d.fecha)}</option>`).join("");
+  // ✅ auto-selecciona primera fecha y pinta el detalle
+if (STATE.sessionDates.length) {
+  dp.value = STATE.sessionDates[0].fecha;     // o deja la que ya exista
+  renderDetailForSelectedDate();
+} else {
+  renderDetailEmpty();
+}
+
 
   // tabla resumen
   const sum = $("summaryByDate");
@@ -770,10 +778,6 @@ function renderSessionDetail(){
       <div><b>${r.pct.toFixed(1)}%</b></div>
     </div>
   `).join("");
-
-  // detalle vacío hasta elegir fecha
-  renderDetailEmpty();
-}
 
 function renderDetailEmpty(){
   const dt = $("detailTable");
@@ -934,5 +938,6 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
