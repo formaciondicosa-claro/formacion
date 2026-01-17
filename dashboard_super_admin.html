@@ -171,19 +171,17 @@ code{color:#fff;}
         <div class="small" id="whoami">—</div>
       </div>
       <div class="pillrow">
-  <span class="badge" id="roleBadge">rol</span>
-  <span class="pill" id="pillStatus">Listo</span>
+        <span class="badge" id="roleBadge">rol</span>
+        <span class="pill" id="pillStatus">Listo</span>
 
-  <button id="btnBack" class="btnMini btnGhost" type="button">Volver a Asignación</button>
-
-  <button id="btnReload" class="btnMini btnGhost" type="button">Actualizar</button>
-  <button id="btnLogout" class="btnMini btnDanger" type="button">Cerrar sesión</button>
-</div>
-
+        <button id="btnBack" class="btnMini btnGhost" type="button">Volver a Asignación</button>
+        <button id="btnReload" class="btnMini btnGhost" type="button">Actualizar</button>
+        <button id="btnLogout" class="btnMini btnDanger" type="button">Cerrar sesión</button>
+      </div>
     </div>
 
     <div class="grid">
-      <!-- LEFT: filtros + lista sesiones -->
+      <!-- LEFT -->
       <div class="panel">
         <h3>Sesiones</h3>
         <div class="small">Filtra y entra a una sesión.</div>
@@ -242,7 +240,7 @@ code{color:#fff;}
         </div>
       </div>
 
-      <!-- RIGHT: detalle sesión -->
+      <!-- RIGHT -->
       <div class="panel">
         <h3>Detalle de sesión</h3>
         <div class="small" id="sessionMeta">Selecciona una sesión a la izquierda.</div>
@@ -291,33 +289,34 @@ code{color:#fff;}
         </div>
 
         <div class="small" style="margin-top:10px;" id="rightMsg"></div>
+
         <hr/>
-<b>Historial por colaborador</b>
-<div class="small">Consulta todas las asistencias registradas de un empleado (todas las sesiones y fechas).</div>
+        <b>Historial por colaborador</b>
+        <div class="small">Consulta todas las asistencias registradas de un empleado (todas las sesiones y fechas).</div>
 
-<div class="row" style="margin-top:10px;">
-  <div class="col">
-    <label>Buscar por documento (recomendado)</label>
-    <input id="histDoc" placeholder="Ej: 1030123456" />
-  </div>
-  <div class="col">
-    <label>o por employee_id (uuid)</label>
-    <input id="histEmpId" placeholder="uuid del employee (si lo tienes)" />
-  </div>
-</div>
+        <div class="row" style="margin-top:10px;">
+          <div class="col">
+            <label>Buscar por documento (recomendado)</label>
+            <input id="histDoc" placeholder="Ej: 1030123456" />
+          </div>
+          <div class="col">
+            <label>o por employee_id (uuid)</label>
+            <input id="histEmpId" placeholder="uuid del employee (si lo tienes)" />
+          </div>
+        </div>
 
-<div class="row" style="margin-top:10px;">
-  <button id="btnHistBuscar" class="btnMini btnGhost" type="button">Buscar historial</button>
-  <button id="btnHistLimpiar" class="btnMini btnGhost" type="button">Limpiar</button>
-</div>
+        <div class="row" style="margin-top:10px;">
+          <button id="btnHistBuscar" class="btnMini btnGhost" type="button">Buscar historial</button>
+          <button id="btnHistLimpiar" class="btnMini btnGhost" type="button">Limpiar</button>
+        </div>
 
-<div class="small" style="margin-top:10px;" id="histMsg"></div>
+        <div class="small" style="margin-top:10px;" id="histMsg"></div>
 
-<div class="tablelike" style="margin-top:10px;" id="histTable">
-  <div class="tr th">
-    <div>Sesión / Entrenamiento</div><div>Fecha</div><div>Asistió</div><div>Estado</div><div>Ciudad</div>
-  </div>
-</div>
+        <div class="tablelike" style="margin-top:10px;" id="histTable">
+          <div class="tr th">
+            <div>Sesión / Entrenamiento</div><div>Fecha</div><div>Asistió</div><div>Estado</div><div>Ciudad</div>
+          </div>
+        </div>
 
       </div>
     </div>
@@ -379,9 +378,9 @@ let STATE = {
   trainers:[],
   selectedSessionId:null,
   selectedSession:null,
-  sessionDates:[],      // array of {fecha}
-  citations:[],         // array of {employee_id, employees{documento,nombre}}
-  attendanceByDate: new Map(), // fecha -> Map(employee_id -> {asistio, estado})
+  sessionDates:[],
+  citations:[],
+  attendanceByDate: new Map(),
 };
 
 /* =======================
@@ -460,21 +459,21 @@ async function boot(){
 
   $("whoami").textContent = `${STATE.user.email} · ${STATE.profile.nombre || ""} · uid: ${STATE.user.id}`;
   $("roleBadge").textContent = STATE.profile.rol;
+
   $("btnLogout").onclick = doLogout;
   $("btnReload").onclick = initData;
-$("btnBack").onclick = () => {
-  window.location.href = "index.html";
-};
+  $("btnBack").onclick = () => { window.location.href = "index.html"; };
 
   $("btnApply").onclick = loadSessions;
   $("btnClear").onclick = clearFilters;
-  $("btnHistBuscar").onclick = buscarHistorialColaborador;
-$("btnHistLimpiar").onclick = limpiarHistorialColaborador;
 
   $("datePick").onchange = () => renderDetailForSelectedDate();
 
   $("btnCsvDate").onclick = exportCsvSelectedDate;
   $("btnCsvAll").onclick = exportCsvAllDates;
+
+  $("btnHistBuscar").onclick = buscarHistorialColaborador;
+  $("btnHistLimpiar").onclick = limpiarHistorialColaborador;
 
   await initData();
 }
@@ -484,10 +483,7 @@ $("btnHistLimpiar").onclick = limpiarHistorialColaborador;
 ======================= */
 async function initData(){
   setPill("Cargando…", "info");
-  await Promise.all([
-    loadTrainings(),
-    loadTrainers()
-  ]);
+  await Promise.all([ loadTrainings(), loadTrainers() ]);
   await loadSessions();
   setPill("Listo", "ok");
 }
@@ -501,9 +497,9 @@ async function loadTrainings(){
   if(error) throw error;
   STATE.trainings = data || [];
 
-  const sel = $("fTraining");
-  sel.innerHTML = `<option value="">Todos</option>` + STATE.trainings
-    .map(t => `<option value="${esc(t.id)}">${esc(t.nombre)}</option>`).join("");
+  $("fTraining").innerHTML =
+    `<option value="">Todos</option>` +
+    STATE.trainings.map(t => `<option value="${esc(t.id)}">${esc(t.nombre)}</option>`).join("");
 }
 
 async function loadTrainers(){
@@ -517,9 +513,9 @@ async function loadTrainers(){
 
   STATE.trainers = (data || []).filter(p => p.rol === "formador");
 
-  const sel = $("fTrainer");
-  sel.innerHTML = `<option value="">Todos</option>` + STATE.trainers
-    .map(p => `<option value="${esc(p.user_id)}">${esc(p.nombre)}</option>`).join("");
+  $("fTrainer").innerHTML =
+    `<option value="">Todos</option>` +
+    STATE.trainers.map(p => `<option value="${esc(p.user_id)}">${esc(p.nombre)}</option>`).join("");
 }
 
 function clearFilters(){
@@ -546,7 +542,6 @@ async function loadSessions(){
   const from = $("fFrom").value || "";
   const to = $("fTo").value || "";
 
-  // Query base (trae trainings anidado si existe FK)
   let q = sb.from("sessions")
     .select("id,training_id,fecha,ciudad,formador_user_id,estado, trainings(nombre)")
     .order("fecha", { ascending:false })
@@ -567,7 +562,6 @@ async function loadSessions(){
 
   let sessions = data || [];
 
-  // filtro cliente (ciudad + search)
   sessions = sessions.filter(s => {
     const trName = (s.trainings?.nombre || "").toLowerCase();
     const city = (s.ciudad || "").toLowerCase();
@@ -584,7 +578,6 @@ async function loadSessions(){
   });
 
   STATE.sessions = sessions;
-
   renderSessionsList();
   setPill("Listo", "ok");
 }
@@ -678,11 +671,8 @@ async function loadAttendanceForAllDates(session_id){
   const fechas = STATE.sessionDates.map(d => d.fecha);
   const empIds = STATE.citations.map(c => c.employee_id).filter(Boolean);
 
-  // si no hay nada, deja vacío
   if(!fechas.length || !empIds.length) return;
 
-  // Nota: si tienes muchísimos citados y muchas fechas, esto puede crecer.
-  // Para tus volúmenes típicos de sesión, funciona bien.
   const { data, error } = await sb
     .from("attendance_dates")
     .select("session_date, employee_id, asistio, estado")
@@ -719,7 +709,6 @@ function renderSessionDetail(){
   const citedTotal = STATE.citations.length;
   const datesTotal = STATE.sessionDates.length;
 
-  // resumen por fecha
   const rows = [];
   let sumYes = 0;
   let sumPct = 0;
@@ -733,6 +722,7 @@ function renderSessionDetail(){
       const rec = map.get(c.employee_id);
       if(rec && rec.asistio === true) yes++;
     }
+
     const no = citedTotal - yes;
     const pct = citedTotal ? (yes / citedTotal) * 100 : 0;
 
@@ -744,26 +734,23 @@ function renderSessionDetail(){
 
   const avgPct = datesTotal ? (sumPct / datesTotal) : 0;
 
-  $("kCited").textContent = citedTotal.toString();
+  $("kCited").textContent = String(citedTotal);
   $("kCitedHint").textContent = citedTotal ? "Basado en citations" : "";
-  $("kDates").textContent = datesTotal.toString();
-  $("kYes").textContent = sumYes.toString();
+  $("kDates").textContent = String(datesTotal);
+  $("kYes").textContent = String(sumYes);
   $("kPct").textContent = `${avgPct.toFixed(1)}%`;
 
-  // pick de fechas
   const dp = $("datePick");
   dp.innerHTML = `<option value="">—</option>` + STATE.sessionDates
     .map(d => `<option value="${esc(d.fecha)}">${esc(d.fecha)}</option>`).join("");
-  // ✅ auto-selecciona primera fecha y pinta el detalle
-if (STATE.sessionDates.length) {
-  dp.value = STATE.sessionDates[0].fecha;     // o deja la que ya exista
-  renderDetailForSelectedDate();
-} else {
-  renderDetailEmpty();
-}
 
+  if (STATE.sessionDates.length) {
+    dp.value = STATE.sessionDates[0].fecha;
+    renderDetailForSelectedDate();
+  } else {
+    renderDetailEmpty();
+  }
 
-  // tabla resumen
   const sum = $("summaryByDate");
   sum.innerHTML = `
     <div class="tr th">
@@ -778,6 +765,7 @@ if (STATE.sessionDates.length) {
       <div><b>${r.pct.toFixed(1)}%</b></div>
     </div>
   `).join("");
+}
 
 function renderDetailEmpty(){
   const dt = $("detailTable");
@@ -816,7 +804,6 @@ function renderDetailForSelectedDate(){
     return;
   }
 
-  // orden por nombre
   const sorted = [...cited].sort((a,b)=>{
     const na = (a.employees?.nombre || "").toLowerCase();
     const nb = (b.employees?.nombre || "").toLowerCase();
@@ -843,6 +830,107 @@ function renderDetailForSelectedDate(){
       </div>
     `;
   }
+}
+
+/* =======================
+   HISTORIAL COLABORADOR
+======================= */
+async function buscarHistorialColaborador(){
+  const sb = getSB();
+  const doc = ($("histDoc").value || "").trim();
+  const empId = ($("histEmpId").value || "").trim();
+
+  $("histMsg").innerHTML = "";
+  $("histTable").innerHTML = `
+    <div class="tr th">
+      <div>Sesión / Entrenamiento</div><div>Fecha</div><div>Asistió</div><div>Estado</div><div>Ciudad</div>
+    </div>
+  `;
+
+  try{
+    setPill("Buscando historial…", "info");
+
+    let employee_id = empId || "";
+
+    if(!employee_id){
+      if(!doc){
+        $("histMsg").innerHTML = `<span class="warn">Ingresa documento o employee_id.</span>`;
+        setPill("Listo", "ok");
+        return;
+      }
+
+      const { data: emp, error: e1 } = await sb
+        .from("employees")
+        .select("id,documento,nombre")
+        .eq("documento", doc)
+        .maybeSingle();
+
+      if(e1) throw e1;
+      if(!emp?.id){
+        $("histMsg").innerHTML = `<span class="warn">No se encontró empleado con documento ${esc(doc)}.</span>`;
+        setPill("Listo", "ok");
+        return;
+      }
+      employee_id = emp.id;
+      $("histEmpId").value = employee_id;
+    }
+
+    const { data, error } = await sb
+      .from("attendance_dates")
+      .select(`
+        session_id,
+        session_date,
+        asistio,
+        estado,
+        sessions(ciudad, trainings(nombre))
+      `)
+      .eq("employee_id", employee_id)
+      .order("session_date", { ascending:false })
+      .limit(800);
+
+    if(error) throw error;
+
+    const rows = data || [];
+    if(!rows.length){
+      $("histMsg").innerHTML = `<span class="warn">Este colaborador no tiene asistencias registradas.</span>`;
+      setPill("Listo", "ok");
+      return;
+    }
+
+    for(const r of rows){
+      const trainingName = r.sessions?.trainings?.nombre || "(sin entrenamiento)";
+      const city = r.sessions?.ciudad || "";
+      const asistTxt = (r.asistio === true) ? "Sí" : (r.asistio === false) ? "No" : "—";
+      const estadoTxt = r.estado || "—";
+
+      $("histTable").innerHTML += `
+        <div class="tr">
+          <div><b>${esc(trainingName)}</b></div>
+          <div>${esc(r.session_date || "")}</div>
+          <div class="${r.asistio === true ? "ok" : r.asistio === false ? "warn" : ""}">${esc(asistTxt)}</div>
+          <div>${esc(estadoTxt)}</div>
+          <div>${esc(city)}</div>
+        </div>
+      `;
+    }
+
+    $("histMsg").innerHTML = `<span class="ok">Historial cargado:</span> ${rows.length} registros.`;
+    setPill("Listo", "ok");
+  }catch(e){
+    $("histMsg").innerHTML = `<span class="err">${esc(e.message || e)}</span>`;
+    setPill("Error", "err");
+  }
+}
+
+function limpiarHistorialColaborador(){
+  $("histDoc").value = "";
+  $("histEmpId").value = "";
+  $("histMsg").innerHTML = "";
+  $("histTable").innerHTML = `
+    <div class="tr th">
+      <div>Sesión / Entrenamiento</div><div>Fecha</div><div>Asistió</div><div>Estado</div><div>Ciudad</div>
+    </div>
+  `;
 }
 
 /* =======================
@@ -938,6 +1026,4 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
-
-
 
