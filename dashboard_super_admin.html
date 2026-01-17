@@ -171,11 +171,15 @@ code{color:#fff;}
         <div class="small" id="whoami">—</div>
       </div>
       <div class="pillrow">
-        <span class="badge" id="roleBadge">rol</span>
-        <span class="pill" id="pillStatus">Listo</span>
-        <button id="btnReload" class="btnMini btnGhost" type="button">Actualizar</button>
-        <button id="btnLogout" class="btnMini btnDanger" type="button">Cerrar sesión</button>
-      </div>
+  <span class="badge" id="roleBadge">rol</span>
+  <span class="pill" id="pillStatus">Listo</span>
+
+  <button id="btnBack" class="btnMini btnGhost" type="button">Volver a Asignación</button>
+
+  <button id="btnReload" class="btnMini btnGhost" type="button">Actualizar</button>
+  <button id="btnLogout" class="btnMini btnDanger" type="button">Cerrar sesión</button>
+</div>
+
     </div>
 
     <div class="grid">
@@ -430,6 +434,9 @@ async function boot(){
   $("roleBadge").textContent = STATE.profile.rol;
   $("btnLogout").onclick = doLogout;
   $("btnReload").onclick = initData;
+$("btnBack").onclick = () => {
+  window.location.href = "index.html";
+};
 
   $("btnApply").onclick = loadSessions;
   $("btnClear").onclick = clearFilters;
@@ -897,3 +904,4 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
