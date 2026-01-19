@@ -273,6 +273,27 @@ function esc(s){
     .replaceAll('"',"quot;").replaceAll("'","&#039;");
 }
 function val(x){ return String(x ?? "").trim(); }
+
+/* ========= NUEVO: helpers Tema visto ========= */
+function normDateISO(d){
+  const s = String(d || "").trim();
+  if(!s) return "";
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return s.slice(0,10);
+}
+async function getTemaVisto(sb, session_id, fechaISO){
+  const { data, error } = await sb
+    .from("session_dates")
+    .select("tema_visto")
+    .eq("session_id", session_id)
+    .eq("fecha", fechaISO)
+    .maybeSingle();
+
+  if(error) throw error;
+  return (data?.tema_visto ?? "").toString().trim();
+}
+/* =========================================== */
+
 function todayISO(){
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -747,7 +768,7 @@ async function bootApp(){
 
   $("whoami").textContent = `${user.email}  ·  ${profile.nombre || ""}  ·  uid: ${user.id}`;
   $("roleBadge").textContent = profile.rol || "formador";
- $("panelTitle").textContent = (profile.rol === "super_admin") ? "Módulo: Asignación de entrenamientos" : "Panel Formador";
+  $("panelTitle").textContent = (profile.rol === "super_admin") ? "Módulo: Asignación de entrenamientos" : "Panel Formador";
   document.body.classList.toggle("formador", profile.rol !== "super_admin");
   $("btnLogout").onclick = doLogout;
 
@@ -961,6 +982,9 @@ async function adminLoadSessionSelects(){
   }).join("");
 }
 
+/* ===========================
+   ADMIN placeholders (igual)
+=========================== */
 async function adminCreateTraining(){ /* ... tu código igual ... */ }
 async function adminCreateSession(){ /* ... tu código igual ... */ }
 async function adminPrepareSessionDatesUI(){ /* ... tu código igual ... */ }
@@ -1029,6 +1053,23 @@ async function trainerLoadSessions(){
             </div>
           </div>
 
+          <!-- ===== NUEVO: Tema visto (obligatorio) ===== -->
+          <div class="item" style="margin-top:10px;">
+            <b>Tema visto (obligatorio)</b>
+            <div class="small">Debes registrar el tema visto para esta fecha antes de marcar asistencia.</div>
+
+            <label>Tema visto</label>
+            <textarea class="temaInput" rows="2" placeholder="Ej: Normas de seguridad, práctica en campo, etc."></textarea>
+
+            <div class="actions" style="margin-top:10px;">
+              <button class="btnMini btnOk" type="button" onclick="trainerSaveTemaVisto('${s.id}')">Guardar tema visto</button>
+              <button class="btnMini btnGhost" type="button" onclick="trainerLoadTemaVisto('${s.id}')">Cargar tema visto</button>
+            </div>
+
+            <div class="small temaMsg" style="margin-top:8px;"></div>
+          </div>
+          <!-- ========================================== -->
+
           <hr/>
           <b>Citados</b>
           <div class="small">Marca asistencia para la fecha seleccionada. “Tarde” cuenta como asistencia.</div>
@@ -1045,6 +1086,8 @@ async function trainerLoadSessions(){
 
     for(const s of sessions){
       await trainerLoadDatesInto(s.id);
+      // intenta cargar tema automáticamente cuando ya haya fecha seleccionada (si el select toma la 1ra)
+      try{ await trainerLoadTemaVisto(s.id); }catch(_){}
       await trainerLoadCitadosInto(s.id);
     }
 
@@ -1060,6 +1103,7 @@ async function trainerLoadSessions(){
 
 window.trainerRefreshSession = async (session_id) => {
   await trainerLoadDatesInto(session_id);
+  await trainerLoadTemaVisto(session_id);
   await trainerLoadCitadosInto(session_id);
 };
 
@@ -1087,13 +1131,102 @@ async function trainerLoadDatesInto(session_id){
     sel.innerHTML = dates.map(d => `<option value="${esc(d.id)}">${esc(d.fecha)}</option>`).join("");
     if(prev && dates.some(d => d.id === prev)) sel.value = prev;
 
-    sel.onchange = () => trainerLoadCitadosInto(session_id);
+    sel.onchange = async () => {
+      await trainerLoadTemaVisto(session_id);
+      await trainerLoadCitadosInto(session_id);
+    };
 
   }catch(e){
     sel.innerHTML = `<option value="">(Error cargando fechas)</option>`;
     setLog({ trainer_dates_error: e, session_id });
   }
 }
+
+/* ===== NUEVO: cargar/guardar Tema visto ===== */
+window.trainerLoadTemaVisto = async (session_id) => {
+  const sb = getSB();
+  const sessBox = document.querySelector(`#sess_${CSS.escape(session_id)}`);
+  if(!sessBox) return;
+
+  const sel = sessBox.querySelector(".dateSelect");
+  const fechaSeleccionada = sel?.options?.[sel.selectedIndex]?.textContent?.trim() || "";
+  const fechaISO = normDateISO(fechaSeleccionada);
+
+  const input = sessBox.querySelector(".temaInput");
+  const msg = sessBox.querySelector(".temaMsg");
+
+  if(msg) msg.innerHTML = "";
+
+  if(!fechaISO){
+    if(msg) msg.innerHTML = `<span class="warn">Selecciona una fecha para cargar el tema.</span>`;
+    return;
+  }
+
+  try{
+    const tema = await getTemaVisto(sb, session_id, fechaISO);
+    if(input) input.value = tema || "";
+    if(msg){
+      msg.innerHTML = tema
+        ? `<span class="ok">Tema cargado.</span>`
+        : `<span class="warn">Aún no hay tema visto registrado para esta fecha.</span>`;
+    }
+  }catch(e){
+    if(msg) msg.innerHTML = `<span class="err">Error cargando tema:</span> ${esc(e.message || e)}`;
+    setLog({ trainer_load_tema_error: e, session_id, fechaISO });
+  }
+};
+
+window.trainerSaveTemaVisto = async (session_id) => {
+  const sb = getSB();
+  const sessBox = document.querySelector(`#sess_${CSS.escape(session_id)}`);
+  if(!sessBox) return;
+
+  const sel = sessBox.querySelector(".dateSelect");
+  const fechaSeleccionada = sel?.options?.[sel.selectedIndex]?.textContent?.trim() || "";
+  const fechaISO = normDateISO(fechaSeleccionada);
+
+  const input = sessBox.querySelector(".temaInput");
+  const msg = sessBox.querySelector(".temaMsg");
+
+  if(msg) msg.innerHTML = "";
+
+  const tema = (input?.value ?? "").toString().trim();
+
+  if(!fechaISO){
+    if(msg) msg.innerHTML = `<span class="warn">Selecciona una fecha para guardar el tema.</span>`;
+    return;
+  }
+  if(!tema){
+    if(msg) msg.innerHTML = `<span class="warn">Escribe el tema visto (obligatorio).</span>`;
+    return;
+  }
+
+  try{
+    const { data: { user } } = await sb.auth.getUser();
+    const payload = {
+      session_id,
+      fecha: fechaISO,
+      tema_visto: tema,
+      tema_visto_at: new Date().toISOString(),
+      tema_visto_by: user?.id || null
+    };
+
+    // Requiere UNIQUE(session_id, fecha) en session_dates
+    const { error } = await sb
+      .from("session_dates")
+      .upsert(payload, { onConflict: "session_id,fecha" });
+
+    if(error) throw error;
+
+    if(msg) msg.innerHTML = `<span class="ok">Tema visto guardado.</span>`;
+    setStatus(`<span class="ok">Tema visto guardado.</span>`);
+  }catch(e){
+    if(msg) msg.innerHTML = `<span class="err">Error guardando tema:</span> ${esc(e.message || e)}`;
+    setStatus(`<span class="err">Error guardando tema visto:</span> ${esc(e.message || e)}`);
+    setLog({ trainer_save_tema_error: e, session_id, fechaISO });
+  }
+};
+/* =========================================== */
 
 async function trainerLoadCitadosInto(session_id){
   const sb = getSB();
@@ -1247,6 +1380,17 @@ window.trainerMark = async (session_id, employee_id, session_date, asistio, esta
   }
 
   try{
+    /* ===== NUEVO: BLOQUEO por Tema visto ===== */
+    const fechaISO = normDateISO(session_date);
+    const tema = await getTemaVisto(sb, session_id, fechaISO);
+
+    if(!tema){
+      setStatus(`<span class="warn">Debes registrar el “tema visto” para la fecha ${esc(fechaISO)} antes de guardar asistencia.</span>`);
+      try{ await trainerLoadTemaVisto(session_id); }catch(_){}
+      return;
+    }
+    /* ======================================== */
+
     // ✅ TARDE = asistio true + estado="tarde"
     const payload = { session_id, employee_id, session_date, asistio: !!asistio, estado: estado || null };
     setLog({ attendance_dates_upsert_payload: payload });
@@ -1303,12 +1447,3 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
-
-
-
-
-
-
-
-
-
