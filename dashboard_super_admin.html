@@ -139,6 +139,16 @@ code{color:#fff;}
   color:var(--muted);
   font-size:12px;
 }
+
+/* ✅ Tabla resumen por fecha: 6 columnas (incluye tema) */
+#summaryByDate .tr{
+  grid-template-columns: 160px 120px 120px 120px 90px 1fr;
+}
+
+/* ✅ Tabla historial: 7 columnas (incluye formador y tema) */
+#histTable .tr{
+  grid-template-columns: 1fr 120px 110px 120px 120px 1fr 1fr;
+}
 </style>
 </head>
 
@@ -268,13 +278,16 @@ code{color:#fff;}
           </div>
         </div>
 
+        <!-- ✅ Tema visto del día seleccionado -->
+        <div class="small" style="margin-top:10px;" id="temaDiaBox"></div>
+
         <hr/>
         <b>Resumen por fecha</b>
-        <div class="small">Basado en <code>attendance_dates</code> y citaciones.</div>
+        <div class="small">Basado en <code>attendance_dates</code> y citaciones. Incluye “tema visto”.</div>
 
         <div class="tablelike" style="margin-top:10px;" id="summaryByDate">
           <div class="tr th">
-            <div>Fecha</div><div>Citados</div><div>Asistieron</div><div>No asistieron</div><div>%</div>
+            <div>Fecha</div><div>Citados</div><div>Asistieron</div><div>No asistieron</div><div>%</div><div>Tema visto</div>
           </div>
         </div>
 
@@ -292,7 +305,7 @@ code{color:#fff;}
 
         <hr/>
         <b>Historial por colaborador</b>
-        <div class="small">Consulta todas las asistencias registradas de un empleado (todas las sesiones y fechas).</div>
+        <div class="small">Consulta todas las asistencias registradas de un empleado (todas las sesiones y fechas), incluyendo <b>Formador</b> y <b>Tema visto</b>.</div>
 
         <div class="row" style="margin-top:10px;">
           <div class="col">
@@ -314,7 +327,7 @@ code{color:#fff;}
 
         <div class="tablelike" style="margin-top:10px;" id="histTable">
           <div class="tr th">
-            <div>Sesión / Entrenamiento</div><div>Fecha</div><div>Asistió</div><div>Estado</div><div>Ciudad</div>
+            <div>Sesión / Entrenamiento</div><div>Fecha</div><div>Asistió</div><div>Estado</div><div>Ciudad</div><div>Formador</div><div>Tema visto</div>
           </div>
         </div>
 
@@ -378,7 +391,7 @@ let STATE = {
   trainers:[],
   selectedSessionId:null,
   selectedSession:null,
-  sessionDates:[],
+  sessionDates:[], // ahora: {fecha, tema_visto}
   citations:[],
   attendanceByDate: new Map(),
 };
@@ -625,6 +638,7 @@ window.selectSession = async (session_id) => {
 
   $("sessionMeta").innerHTML = `Cargando detalle...`;
   $("rightMsg").textContent = "";
+  $("temaDiaBox").innerHTML = "";
   setPill("Cargando sesión…", "info");
 
   try{
@@ -647,7 +661,7 @@ async function loadSessionDates(session_id){
   const sb = getSB();
   const { data, error } = await sb
     .from("session_dates")
-    .select("fecha")
+    .select("fecha, tema_visto")   /* ✅ ahora trae tema_visto */
     .eq("session_id", session_id)
     .order("fecha", { ascending:true });
   if(error) throw error;
@@ -687,6 +701,11 @@ async function loadAttendanceForAllDates(session_id){
     if(!STATE.attendanceByDate.has(f)) STATE.attendanceByDate.set(f, new Map());
     STATE.attendanceByDate.get(f).set(row.employee_id, { asistio: row.asistio, estado: row.estado || null });
   }
+}
+
+function getTemaForFecha(fecha){
+  const d = (STATE.sessionDates || []).find(x => x.fecha === fecha);
+  return (d && (d.tema_visto ?? "")) ? String(d.tema_visto) : "";
 }
 
 function renderSessionDetail(){
@@ -729,7 +748,7 @@ function renderSessionDetail(){
     sumYes += yes;
     sumPct += pct;
 
-    rows.push({ fecha, cited: citedTotal, yes, no, pct });
+    rows.push({ fecha, cited: citedTotal, yes, no, pct, tema: d.tema_visto || "" });
   }
 
   const avgPct = datesTotal ? (sumPct / datesTotal) : 0;
@@ -754,7 +773,7 @@ function renderSessionDetail(){
   const sum = $("summaryByDate");
   sum.innerHTML = `
     <div class="tr th">
-      <div>Fecha</div><div>Citados</div><div>Asistieron</div><div>No asistieron</div><div>%</div>
+      <div>Fecha</div><div>Citados</div><div>Asistieron</div><div>No asistieron</div><div>%</div><div>Tema visto</div>
     </div>
   ` + rows.map(r => `
     <div class="tr">
@@ -763,11 +782,13 @@ function renderSessionDetail(){
       <div class="${r.yes ? "ok":""}">${r.yes}</div>
       <div class="${r.no ? "warn":""}">${r.no}</div>
       <div><b>${r.pct.toFixed(1)}%</b></div>
+      <div class="small">${esc(r.tema || "—")}</div>
     </div>
   `).join("");
 }
 
 function renderDetailEmpty(){
+  $("temaDiaBox").innerHTML = "";
   const dt = $("detailTable");
   dt.innerHTML = `
     <div class="tr th">
@@ -786,6 +807,11 @@ function renderDetailForSelectedDate(){
     renderDetailEmpty();
     return;
   }
+
+  const tema = getTemaForFecha(fecha);
+  $("temaDiaBox").innerHTML = tema
+    ? `<span class="badge">Tema visto:</span> <span class="small">${esc(tema)}</span>`
+    : `<span class="badge">Tema visto:</span> <span class="small">—</span>`;
 
   const cited = STATE.citations;
   const map = STATE.attendanceByDate.get(fecha) || new Map();
@@ -843,7 +869,7 @@ async function buscarHistorialColaborador(){
   $("histMsg").innerHTML = "";
   $("histTable").innerHTML = `
     <div class="tr th">
-      <div>Sesión / Entrenamiento</div><div>Fecha</div><div>Asistió</div><div>Estado</div><div>Ciudad</div>
+      <div>Sesión / Entrenamiento</div><div>Fecha</div><div>Asistió</div><div>Estado</div><div>Ciudad</div><div>Formador</div><div>Tema visto</div>
     </div>
   `;
 
@@ -875,6 +901,7 @@ async function buscarHistorialColaborador(){
       $("histEmpId").value = employee_id;
     }
 
+    // ✅ Traemos también formador_user_id para poder mostrar nombre del formador
     const { data, error } = await sb
       .from("attendance_dates")
       .select(`
@@ -882,7 +909,7 @@ async function buscarHistorialColaborador(){
         session_date,
         asistio,
         estado,
-        sessions(ciudad, trainings(nombre))
+        sessions(ciudad, formador_user_id, trainings(nombre))
       `)
       .eq("employee_id", employee_id)
       .order("session_date", { ascending:false })
@@ -897,11 +924,42 @@ async function buscarHistorialColaborador(){
       return;
     }
 
+    // ✅ Map formadores (profiles)
+    const trainerIds = [...new Set(rows.map(r => r.sessions?.formador_user_id).filter(Boolean))];
+    let trainerMap = new Map();
+    if(trainerIds.length){
+      const { data: trs, error: eT } = await sb
+        .from("profiles")
+        .select("user_id,nombre")
+        .in("user_id", trainerIds);
+      if(eT) throw eT;
+      trainerMap = new Map((trs || []).map(t => [t.user_id, t.nombre || ""]));
+    }
+
+    // ✅ Map temas (session_dates) por session_id + fecha
+    const sessionIds = [...new Set(rows.map(r => r.session_id).filter(Boolean))];
+    let temaMap = new Map(); // key: `${session_id}|${fecha}` -> tema
+    if(sessionIds.length){
+      const { data: temas, error: eS } = await sb
+        .from("session_dates")
+        .select("session_id,fecha,tema_visto")
+        .in("session_id", sessionIds);
+      if(eS) throw eS;
+
+      temaMap = new Map((temas || []).map(t => [`${t.session_id}|${t.fecha}`, t.tema_visto || ""]));
+    }
+
     for(const r of rows){
       const trainingName = r.sessions?.trainings?.nombre || "(sin entrenamiento)";
       const city = r.sessions?.ciudad || "";
       const asistTxt = (r.asistio === true) ? "Sí" : (r.asistio === false) ? "No" : "—";
       const estadoTxt = r.estado || "—";
+
+      const formadorId = r.sessions?.formador_user_id || "";
+      const formadorNombre = formadorId ? (trainerMap.get(formadorId) || "(sin formador)") : "(sin formador)";
+
+      const keyTema = `${r.session_id}|${r.session_date}`;
+      const tema = temaMap.get(keyTema) || "";
 
       $("histTable").innerHTML += `
         <div class="tr">
@@ -910,6 +968,8 @@ async function buscarHistorialColaborador(){
           <div class="${r.asistio === true ? "ok" : r.asistio === false ? "warn" : ""}">${esc(asistTxt)}</div>
           <div>${esc(estadoTxt)}</div>
           <div>${esc(city)}</div>
+          <div class="small">${esc(formadorNombre || "—")}</div>
+          <div class="small">${esc(tema || "—")}</div>
         </div>
       `;
     }
@@ -928,7 +988,7 @@ function limpiarHistorialColaborador(){
   $("histMsg").innerHTML = "";
   $("histTable").innerHTML = `
     <div class="tr th">
-      <div>Sesión / Entrenamiento</div><div>Fecha</div><div>Asistió</div><div>Estado</div><div>Ciudad</div>
+      <div>Sesión / Entrenamiento</div><div>Fecha</div><div>Asistió</div><div>Estado</div><div>Ciudad</div><div>Formador</div><div>Tema visto</div>
     </div>
   `;
 }
@@ -1026,4 +1086,3 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
-
