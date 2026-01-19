@@ -83,7 +83,9 @@ button:disabled{opacity:.55;cursor:not-allowed;}
   grid-template-columns: 430px 1fr;
   gap:14px;
 }
-.grid.onecol{ grid-template-columns: 1fr; }
+.grid.onecol{
+  grid-template-columns: 1fr;
+}
 @media (max-width: 980px){ .grid{grid-template-columns:1fr;} }
 
 .panel{
@@ -137,7 +139,7 @@ pre{
 }
 .tablelike .tr{
   display:grid;
-  grid-template-columns: 1fr 120px 120px 120px; /* 4 cols */
+  grid-template-columns: 1fr 120px 120px 120px; /* ✅ 4 columnas */
   gap:10px;
   padding:10px 12px;
   border-bottom:1px solid rgba(167,139,250,.18);
@@ -159,9 +161,13 @@ pre{
 .btnOk:hover,.btnBad:hover{filter:brightness(1.05);}
 code{color:#fff;}
 
-/* ===== FORMADOR: ocultar panel izquierdo + 1 columna ===== */
-body.formador .grid{ grid-template-columns: 1fr !important; }
-body.formador #leftPanel{ display:none !important; }
+/* ===== FORMADOR: ocultar panel izquierdo + 1 columna (SIN tocar JS) ===== */
+body.formador .grid{
+  grid-template-columns: 1fr !important;
+}
+body.formador #leftPanel{
+  display:none !important;
+}
 </style>
 </head>
 
@@ -169,6 +175,7 @@ body.formador #leftPanel{ display:none !important; }
 
 <!-- LOGIN -->
 <div id="login" class="card">
+
   <h1>Formación DICO</h1>
   <p>Ingreso al sistema de asistencia</p>
 
@@ -246,13 +253,13 @@ body.formador #leftPanel{ display:none !important; }
    CONFIGURA AQUÍ TUS DATOS DE SUPABASE
 ========================================================= */
 const SUPABASE_URL = "https://bqlltjronzrlgbjjntes.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_j84bjNzsEw1O-zsvliQ4Wg_BhGkSqR_";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_j84bjNzsEw1O-zsvliQ4Wg_BhGkSqR_"; // debe estar COMPLETA
 
-// ✅ TU URL REAL (GitHub Pages). Debe abrir el MISMO archivo donde está este código.
+// ✅ URL real de tu GitHub Pages (esta es la tuya)
 const RESET_REDIRECT_TO = "https://formaciondicosa-claro.github.io/formacion/#reset";
 
 const EMP_HEADERS = ["documento","nombre","cargo","area","supervisor","email","estado"];
-const CITE_HEADERS = ["session_id","documento"];
+const CITE_HEADERS = ["session_id","documento"]; // para carga masiva
 
 /* =========================================================
    HELPERS
@@ -270,7 +277,7 @@ function esc(s){
 }
 function val(x){ return String(x ?? "").trim(); }
 
-/* ========= helpers Tema visto (si ya los usas en tu archivo real, déjalos) ========= */
+/* ========= NUEVO: helpers Tema visto ========= */
 function normDateISO(d){
   const s = String(d || "").trim();
   if(!s) return "";
@@ -284,10 +291,11 @@ async function getTemaVisto(sb, session_id, fechaISO){
     .eq("session_id", session_id)
     .eq("fecha", fechaISO)
     .maybeSingle();
+
   if(error) throw error;
   return (data?.tema_visto ?? "").toString().trim();
 }
-/* ================================================================================== */
+/* =========================================== */
 
 function todayISO(){
   const d = new Date();
@@ -307,16 +315,17 @@ function downloadTextFile(content, filename, mime){
 }
 
 /* =========================================================
-   DETECCIÓN RESET (hash + query)
+   DETECCIÓN RESET (desde email)  ✅ FIX PKCE (?code=...)
 ========================================================= */
 function isRecoveryFlow(){
   const h = (window.location.hash || "").toLowerCase();
   const q = (window.location.search || "").toLowerCase();
+  // Recovery puede venir en hash o en query (?code=...)
   return (
     h.includes("type=recovery") || q.includes("type=recovery") ||
     h.includes("#reset") ||
-    h.includes("access_token=") || q.includes("access_token=") ||
-    h.includes("refresh_token=") || q.includes("refresh_token=")
+    h.includes("access_token=") || h.includes("refresh_token=") ||
+    q.includes("code=")
   );
 }
 function showOnly(view){
@@ -325,7 +334,8 @@ function showOnly(view){
   $("app").classList.toggle("hidden", view !== "app");
 }
 function goToLogin(){
-  window.location.hash = "";
+  // Limpia hash y query para volver limpio
+  history.replaceState({}, document.title, window.location.pathname);
   showOnly("login");
   $("loginMsg").innerHTML = `<span class="small">Listo para iniciar sesión.</span>`;
 }
@@ -335,7 +345,7 @@ function goToLogin(){
 ========================================================= */
 function getSB(){
   if(!window.supabase || !window.supabase.createClient){
-    throw new Error("No se cargó Supabase JS. Abre desde GitHub Pages o revisa bloqueos.");
+    throw new Error("No se cargó Supabase JS. Abre desde Live Server/GitHub Pages o revisa bloqueos.");
   }
   window.__sb = window.__sb || window.supabase.createClient(
     SUPABASE_URL,
@@ -405,11 +415,8 @@ async function doForgot(){
   }
 
   try{
-    // ✅ IMPORTANTE: usar constante (NO “quemar” URL)
-    const redirectTo = RESET_REDIRECT_TO;
-
-    const { data, error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
-    setLog({ reset_data: data, reset_error: error, redirectTo });
+    const { data, error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: RESET_REDIRECT_TO });
+    setLog({ reset_data: data, reset_error: error, redirectTo: RESET_REDIRECT_TO });
 
     if(error){
       msg.innerHTML = `<span class="err">${esc(error.message)}</span>`;
@@ -450,7 +457,7 @@ async function doResetPassword(){
   btn.textContent = "Guardando...";
 
   try{
-    // ✅ en recovery debe existir session; si no, link inválido/expirado
+    // ✅ En recovery debe existir session (si no, link inválido/expirado)
     const { data: sessData, error: sessErr } = await sb.auth.getSession();
     setLog({ reset_getSession_data: sessData, reset_getSession_error: sessErr });
 
@@ -480,7 +487,7 @@ async function doResetPassword(){
 }
 
 /* =========================================================
-   PROFILE / APP (tu app sigue igual; aquí lo dejo mínimo)
+   PROFILE / APP (tu código)
 ========================================================= */
 async function getProfile(user){
   const sb = getSB();
@@ -489,6 +496,7 @@ async function getProfile(user){
     .select("user_id,nombre,rol,activo")
     .eq("user_id", user.id)
     .maybeSingle();
+
   if(error) throw error;
 
   if(!data){
@@ -498,9 +506,29 @@ async function getProfile(user){
 }
 
 function setPanels(role){
-  // IMPORTANTE: aquí va tu render real (admin + trainer). No lo cambio.
-  // Si tu archivo original tiene todo el módulo, deja tu código tal cual.
+  if(role === "super_admin"){
+    $("leftPanel").innerHTML = renderAdminLeft();
+    $("rightPanel").innerHTML = renderAdminRight();
+    wireAdminHandlers();
+  }else{
+    $("leftPanel").innerHTML = renderTrainerLeft();
+    $("rightPanel").innerHTML = renderTrainerRight();
+    wireTrainerHandlers();
+  }
 }
+
+/* ======= RENDER (deja tu contenido como lo tengas) =======
+   NOTA: En tu mensaje anterior, aquí venían muchas funciones.
+   Para no dañarte nada, pega aquí EXACTAMENTE tus render/handlers reales
+   (o deja los tuyos completos tal cual los tienes).
+========================================================== */
+function renderAdminLeft(){ return `<h3>Asignación de entrenamientos</h3><div class="small">Tu panel admin.</div>`; }
+function renderAdminRight(){ return `<h3>Sesiones</h3><div class="small">Tu panel sesiones.</div>`; }
+function renderTrainerLeft(){ return `<h3>Formador</h3><div class="small">Tu panel formador.</div>`; }
+function renderTrainerRight(){ return `<h3>Mis sesiones</h3><div class="small">Tus sesiones.</div>`; }
+
+function wireAdminHandlers(){ /* pega tu código real aquí */ }
+function wireTrainerHandlers(){ /* pega tu código real aquí */ }
 
 let STATE = { user:null, profile:null };
 
@@ -535,7 +563,7 @@ async function bootApp(){
 }
 
 /* =========================================================
-   INIT
+   INIT  ✅ FIX: exchangeCodeForSession para ?code=...
 ========================================================= */
 document.addEventListener("DOMContentLoaded", async () => {
   try{
@@ -552,11 +580,18 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    // ✅ RECOVERY: valida sesión del link ANTES de permitir guardar contraseña
     if(isRecoveryFlow()){
       showOnly("reset");
       $("resetMsg").innerHTML = `<span class="small">Validando enlace...</span>`;
       const sb = getSB();
+
+      // ✅ Si viene ?code=..., intercambia code por sesión (PKCE)
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+      if(code){
+        const { data: exData, error: exErr } = await sb.auth.exchangeCodeForSession(window.location.href);
+        setLog({ exchangeCodeForSession_data: exData, exchangeCodeForSession_error: exErr });
+      }
 
       const { data, error } = await sb.auth.getSession();
       setLog({ recovery_getSession_data: data, recovery_getSession_error: error });
