@@ -83,9 +83,7 @@ button:disabled{opacity:.55;cursor:not-allowed;}
   grid-template-columns: 430px 1fr;
   gap:14px;
 }
-.grid.onecol{
-  grid-template-columns: 1fr;
-}
+.grid.onecol{ grid-template-columns: 1fr; }
 @media (max-width: 980px){ .grid{grid-template-columns:1fr;} }
 
 .panel{
@@ -139,7 +137,7 @@ pre{
 }
 .tablelike .tr{
   display:grid;
-  grid-template-columns: 1fr 120px 120px 120px; /* ✅ 4 columnas */
+  grid-template-columns: 1fr 120px 120px 120px; /* 4 columnas */
   gap:10px;
   padding:10px 12px;
   border-bottom:1px solid rgba(167,139,250,.18);
@@ -162,12 +160,8 @@ pre{
 code{color:#fff;}
 
 /* ===== FORMADOR: ocultar panel izquierdo + 1 columna (SIN tocar JS) ===== */
-body.formador .grid{
-  grid-template-columns: 1fr !important;
-}
-body.formador #leftPanel{
-  display:none !important;
-}
+body.formador .grid{ grid-template-columns: 1fr !important; }
+body.formador #leftPanel{ display:none !important; }
 </style>
 </head>
 
@@ -175,7 +169,6 @@ body.formador #leftPanel{
 
 <!-- LOGIN -->
 <div id="login" class="card">
-
   <h1>Formación DICO</h1>
   <p>Ingreso al sistema de asistencia</p>
 
@@ -228,7 +221,8 @@ body.formador #leftPanel{
     <div class="pillrow">
       <span class="badge" id="roleBadge">rol</span>
 
-      <button id="btnRevokeOthers" class="btnMini btnDanger hidden" type="button" title="Cierra sesiones activas en otros dispositivos (no te saca a ti)">
+      <button id="btnRevokeOthers" class="btnMini btnDanger hidden" type="button"
+        title="Cierra sesiones activas en otros dispositivos (no te saca a ti)">
         Cerrar otras sesiones
       </button>
 
@@ -270,7 +264,7 @@ function setLog(obj){ $log.textContent = (typeof obj === "string") ? obj : JSON.
 function esc(s){
   return String(s ?? "")
     .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
-    .replaceAll('"',"quot;").replaceAll("'","&#039;");
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
 }
 function val(x){ return String(x ?? "").trim(); }
 function todayISO(){
@@ -685,16 +679,16 @@ function renderAdminRight(){
     <h3>Sesiones</h3>
     <div class="small">Lista de sesiones creadas (últimas 50).</div>
     <hr/>
-   <div class="row">
-  <button id="btnRefreshAdmin" class="btnMini btnGhost" type="button">Actualizar</button>
-  <a class="btnMini btnGhost"
-   href="./dashboard_super_admin.html"
-   target="_blank"
-   rel="noopener"
-   style="display:inline-block;text-decoration:none;text-align:center;">
-  Ver Dashboard
-</a>
-</div>
+    <div class="row">
+      <button id="btnRefreshAdmin" class="btnMini btnGhost" type="button">Actualizar</button>
+      <a class="btnMini btnGhost"
+         href="./dashboard_super_admin.html"
+         target="_blank"
+         rel="noopener"
+         style="display:inline-block;text-decoration:none;text-align:center;">
+        Ver Dashboard
+      </a>
+    </div>
     <div id="adminSessions" class="list" style="margin-top:12px;"></div>
   `;
 }
@@ -747,8 +741,10 @@ async function bootApp(){
 
   $("whoami").textContent = `${user.email}  ·  ${profile.nombre || ""}  ·  uid: ${user.id}`;
   $("roleBadge").textContent = profile.rol || "formador";
- $("panelTitle").textContent = (profile.rol === "super_admin") ? "Módulo: Asignación de entrenamientos" : "Panel Formador";
+  $("panelTitle").textContent = (profile.rol === "super_admin") ? "Módulo: Asignación de entrenamientos" : "Panel Formador";
+
   document.body.classList.toggle("formador", profile.rol !== "super_admin");
+
   $("btnLogout").onclick = doLogout;
 
   if(profile.rol === "super_admin"){
@@ -961,19 +957,482 @@ async function adminLoadSessionSelects(){
   }).join("");
 }
 
-async function adminCreateTraining(){ /* ... tu código igual ... */ }
-async function adminCreateSession(){ /* ... tu código igual ... */ }
-async function adminPrepareSessionDatesUI(){ /* ... tu código igual ... */ }
-async function adminSaveSessionDates(){ /* ... tu código igual ... */ }
-window.adminDeleteSession = async () => { /* ... tu código igual ... */ }
-async function adminUploadEmployees(){ /* ... tu código igual ... */ }
-async function adminSearchEmployees(){ /* ... tu código igual ... */ }
-window.adminAddCitation = async () => { /* ... tu código igual ... */ }
-async function adminUploadCitations(){ /* ... tu código igual ... */ }
+/* ===== ADMIN FUNCIONALES (NO PLACEHOLDERS) ===== */
+async function adminCreateTraining(){
+  const sb = getSB();
+  const nombre = val($("trNombre").value);
+  const vigencia = Number($("trDuracion").value || 1);
+  const certifica = $("trCertifica").value === "true";
+  const msg = $("trMsg");
+  msg.innerHTML = "";
+
+  if(!nombre){
+    msg.innerHTML = `<span class="err">Debes ingresar el nombre.</span>`;
+    return;
+  }
+  const vigencia_dias = Math.max(1, isFinite(vigencia)?vigencia:1);
+
+  $("btnCreateTraining").disabled = true;
+  $("btnCreateTraining").textContent = "Guardando...";
+
+  try{
+    const { data, error } = await sb
+      .from("trainings")
+      .insert({ nombre, vigencia_dias, certifica })
+      .select("id,nombre,vigencia_dias,certifica")
+      .single();
+
+    if(error) throw error;
+
+    msg.innerHTML = `<span class="ok">Entrenamiento creado.</span> training_id: <code>${esc(data.id)}</code>`;
+    setStatus(`<span class="ok">Entrenamiento guardado.</span>`);
+    setLog({ training_created: data });
+
+    $("trNombre").value = "";
+    $("trDuracion").value = 1;
+    $("trCertifica").value = "true";
+
+    await adminRefreshAll();
+
+  }catch(e){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
+    setStatus(`<span class="err">No se pudo crear entrenamiento.</span>`);
+    setLog(e);
+  }finally{
+    $("btnCreateTraining").disabled = false;
+    $("btnCreateTraining").textContent = "Guardar entrenamiento";
+  }
+}
+
+/* Crear sesión + preparar fechas reales */
+async function adminCreateSession(){
+  const sb = getSB();
+
+  const training_id = val($("sessionTrainingId").value);
+  const fecha = val($("sessionFecha").value);
+  const ciudad = val($("sessionCiudad").value);
+  const formador_user_id = $("sessionFormador").value;
+  const estado = val($("sessionEstado").value) || null;
+  const msg = $("sessionMsg");
+  msg.innerHTML = "";
+
+  if(!training_id){ msg.innerHTML = `<span class="err">Pega el training_id.</span>`; return; }
+  if(!fecha){ msg.innerHTML = `<span class="err">Selecciona la fecha inicio.</span>`; return; }
+  if(!formador_user_id){ msg.innerHTML = `<span class="err">Selecciona el formador.</span>`; return; }
+
+  $("btnCreateSession").disabled = true;
+  $("btnCreateSession").textContent = "Creando...";
+
+  try{
+    const payload = { training_id, fecha, ciudad, formador_user_id, estado };
+    const { data, error } = await sb
+      .from("sessions")
+      .insert(payload)
+      .select("id,training_id,fecha,ciudad,formador_user_id,estado")
+      .single();
+
+    if(error) throw error;
+
+    msg.innerHTML = `<span class="ok">Sesión creada.</span> session_id: <code>${esc(data.id)}</code>`;
+    setStatus(`<span class="ok">Sesión creada.</span> Ahora configura y guarda fechas.`);
+    setLog({ session_created: data });
+
+    await adminPrepareSessionDatesUI(data.id, training_id, fecha);
+    await adminRefreshAll();
+
+  }catch(e){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
+    setStatus(`<span class="err">No se pudo crear sesión.</span>`);
+    setLog(e);
+  }finally{
+    $("btnCreateSession").disabled = false;
+    $("btnCreateSession").textContent = "Crear sesión";
+  }
+}
+
+async function adminPrepareSessionDatesUI(session_id, training_id, startDate){
+  const sb = getSB();
+
+  $("datesBox").classList.remove("hidden");
+  $("datesBox").dataset.sessionId = session_id;
+
+  let dur = 1;
+  try{
+    const { data: tr, error } = await sb.from("trainings").select("vigencia_dias").eq("id", training_id).maybeSingle();
+    if(error) throw error;
+    dur = Math.max(1, Number(tr?.vigencia_dias || 1));
+  }catch(e){
+    dur = 1;
+  }
+
+  const list = $("datesList");
+  list.innerHTML = "";
+
+  for(let i=0;i<dur;i++){
+    const iso = addDaysISO(startDate, i);
+    list.insertAdjacentHTML("beforeend", `
+      <div class="item">
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <div class="small"><b>Día ${i+1}</b></div>
+          <div class="small"><code>${esc(session_id)}</code></div>
+        </div>
+        <label>Fecha</label>
+        <input type="date" class="dateInput" data-idx="${i}" value="${iso}" />
+      </div>
+    `);
+  }
+
+  $("datesMsg").innerHTML = `<span class="small">Sesión: <code>${esc(session_id)}</code>. Revisa/ajusta las fechas y guarda.</span>`;
+}
+
+async function adminSaveSessionDates(){
+  const sb = getSB();
+  const box = $("datesBox");
+  const session_id = box.dataset.sessionId;
+  const msg = $("datesMsg");
+  msg.innerHTML = "";
+
+  if(!session_id){
+    msg.innerHTML = `<span class="err">No hay sesión seleccionada.</span>`;
+    return;
+  }
+
+  const inputs = Array.from(box.querySelectorAll(".dateInput"));
+  const fechas = inputs.map(i => val(i.value)).filter(Boolean);
+
+  if(!fechas.length){
+    msg.innerHTML = `<span class="warn">No hay fechas.</span>`;
+    return;
+  }
+
+  const set = new Set(fechas);
+  if(set.size !== fechas.length){
+    msg.innerHTML = `<span class="err">Hay fechas repetidas. Corrige antes de guardar.</span>`;
+    return;
+  }
+
+  $("btnSaveDates").disabled = true;
+  $("btnSaveDates").textContent = "Guardando...";
+  setStatus("Guardando fechas reales...");
+
+  try{
+    let r = await sb.from("session_dates").delete().eq("session_id", session_id);
+    if(r.error) throw r.error;
+
+    const payload = fechas.map(f => ({ session_id, fecha: f }));
+    r = await sb.from("session_dates").insert(payload);
+    if(r.error) throw r.error;
+
+    msg.innerHTML = `<span class="ok">Fechas guardadas.</span> (${fechas.length})`;
+    setStatus(`<span class="ok">Fechas reales guardadas.</span>`);
+    setLog({ session_dates_saved: { session_id, fechas } });
+
+  }catch(e){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
+    setStatus(`<span class="err">No se pudieron guardar fechas.</span>`);
+    setLog(e);
+  }finally{
+    $("btnSaveDates").disabled = false;
+    $("btnSaveDates").textContent = "Guardar fechas";
+  }
+}
+
+window.adminDeleteSession = async (session_id) => {
+  if(!confirm("¿Eliminar esta sesión?\n\nSe eliminarán también citaciones, fechas y asistencias asociadas.")) return;
+  const sb = getSB();
+  setStatus(`Eliminando sesión <code>${esc(session_id)}</code>...`);
+
+  try{
+    let r = await sb.from("attendance_dates").delete().eq("session_id", session_id);
+    if(r.error) throw r.error;
+
+    r = await sb.from("citations").delete().eq("session_id", session_id);
+    if(r.error) throw r.error;
+
+    r = await sb.from("session_dates").delete().eq("session_id", session_id);
+    if(r.error) throw r.error;
+
+    r = await sb.from("sessions").delete().eq("id", session_id);
+    if(r.error) throw r.error;
+
+    setStatus(`<span class="ok">Sesión eliminada.</span>`);
+    setLog({ session_deleted: session_id });
+
+    await adminRefreshAll();
+
+  }catch(e){
+    setStatus(`<span class="err">Error eliminando:</span> ${esc(e.message || e)}`);
+    setLog(e);
+  }
+};
+
+async function adminUploadEmployees(){
+  const sb = getSB();
+  const file = $("empFile").files?.[0];
+  const msg = $("empMsg");
+  msg.innerHTML = "";
+
+  if(!file){ alert("Selecciona un CSV o XLSX."); return; }
+
+  $("btnEmpUpload").disabled = true;
+  $("btnEmpUpload").textContent = "Procesando...";
+  setStatus("Leyendo archivo...");
+
+  try{
+    let rows = [];
+    if(file.name.toLowerCase().endsWith(".xlsx")){
+      const buf = await file.arrayBuffer();
+      rows = parseXLSX(buf);
+    }else{
+      const text = await file.text();
+      rows = parseDelimited(text);
+    }
+
+    if(!rows.length) throw new Error("Archivo vacío.");
+
+    let headers = rows[0].map(h => val(h).toLowerCase()).map(h => h.replace(/\s+/g," ").trim());
+    const missing = EMP_HEADERS.filter(h => !headers.includes(h));
+    if(missing.length){
+      throw new Error(`Faltan columnas requeridas: ${missing.join(", ")}\nEncabezados detectados: ${headers.join(", ")}`);
+    }
+
+    const idx = {};
+    headers.forEach((h,i)=> idx[h]=i);
+
+    const dataRows = rows.slice(1).filter(r => r.some(c => val(c) !== ""));
+    if(!dataRows.length) throw new Error("No hay filas de datos.");
+
+    const payload = dataRows.map(r => ({
+      documento: val(r[idx.documento]),
+      nombre: val(r[idx.nombre]),
+      cargo: val(r[idx.cargo]),
+      area: val(r[idx.area]),
+      supervisor: val(r[idx.supervisor]),
+      email: val(r[idx.email]),
+      estado: val(r[idx.estado]) || "activo"
+    })).filter(x => x.documento && x.nombre);
+
+    if(!payload.length) throw new Error("No hay registros válidos (requiere documento y nombre).");
+
+    setStatus(`Insertando/actualizando ${payload.length} empleados...`);
+    setLog({ employees_preview: payload.slice(0, 8), total: payload.length });
+
+    // upsert por documento (requiere unique en employees.documento)
+    let res = await sb.from("employees").upsert(payload, { onConflict: "documento" }).select("id,documento,nombre");
+    // fallback si la base no tiene unique
+    if(res.error && String(res.error.message||"").toLowerCase().includes("on conflict")){
+      res = await sb.from("employees").insert(payload).select("id,documento,nombre");
+    }
+    if(res.error) throw res.error;
+
+    msg.innerHTML = `<span class="ok">Empleados cargados.</span> (${res.data?.length ?? 0})`;
+    setStatus(`<span class="ok">Empleados cargados.</span>`);
+    setLog({ employees_inserted_or_upserted: res.data });
+
+  }catch(e){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
+    setStatus(`<span class="err">Error cargando employees.</span>`);
+    setLog(e);
+  }finally{
+    $("btnEmpUpload").disabled = false;
+    $("btnEmpUpload").textContent = "Subir e insertar";
+  }
+}
+
+async function adminSearchEmployees(){
+  const sb = getSB();
+  const q = val($("empSearch").value);
+  const out = $("empResults");
+  out.innerHTML = "";
+
+  if(!q){
+    out.innerHTML = `<div class="small"><span class="warn">Ingresa algo para buscar.</span></div>`;
+    return;
+  }
+
+  setStatus("Buscando empleados...");
+  try{
+    const { data, error } = await sb
+      .from("employees")
+      .select("id,documento,nombre,cargo,area,estado")
+      .or(`documento.eq.${q},nombre.ilike.%${q}%`)
+      .limit(25);
+
+    if(error) throw error;
+
+    if(!data?.length){
+      out.innerHTML = `<div class="small">Sin resultados.</div>`;
+      setStatus(`<span class="warn">Sin resultados.</span>`);
+      return;
+    }
+
+    out.innerHTML = data.map(e => `
+      <div class="item">
+        <b>${esc(e.nombre)}</b>
+        <div class="small">${esc(e.documento)} · ${esc(e.cargo || "")} · ${esc(e.area || "")}</div>
+        <div class="actions">
+          <button class="btnMini" type="button" onclick="adminAddCitation('${e.id}')">Citar a esta sesión</button>
+        </div>
+      </div>
+    `).join("");
+
+    setStatus(`<span class="ok">Resultados:</span> ${data.length}`);
+    setLog({ employee_search: q, results: data });
+
+  }catch(err){
+    out.innerHTML = `<div class="small"><span class="err">Error:</span> ${esc(err.message || err)}</div>`;
+    setStatus(`<span class="err">Error búsqueda empleados.</span>`);
+    setLog(err);
+  }
+}
+
+window.adminAddCitation = async (employee_id) => {
+  const sb = getSB();
+  const session_id = $("citeSession").value;
+  const msg = $("citeMsg");
+
+  if(!session_id){
+    alert("Selecciona una sesión primero.");
+    return;
+  }
+
+  msg.innerHTML = "Citando...";
+  setStatus("Guardando citación...");
+
+  try{
+    const payload = { session_id, employee_id, estado: "citada" };
+
+    let res = await sb.from("citations").upsert(payload, { onConflict: "session_id,employee_id" }).select("id,session_id,employee_id,estado").single();
+    if(res.error && String(res.error.message||"").toLowerCase().includes("on conflict")){
+      res = await sb.from("citations").insert(payload).select("id,session_id,employee_id,estado").single();
+    }
+    if(res.error) throw res.error;
+
+    msg.innerHTML = `<span class="ok">Citado.</span> employee_id: <code>${esc(employee_id)}</code>`;
+    setStatus(`<span class="ok">Empleado citado.</span>`);
+    setLog({ citation_saved: res.data });
+
+  }catch(err){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(err.message || err)}`;
+    setStatus(`<span class="err">No se pudo citar.</span>`);
+    setLog(err);
+  }
+};
+
+async function adminUploadCitations(){
+  const sb = getSB();
+  const file = $("citeFile").files?.[0];
+  const msg = $("citeUploadMsg");
+  msg.innerHTML = "";
+
+  if(!file){ alert("Selecciona un CSV o XLSX."); return; }
+
+  $("btnCiteUpload").disabled = true;
+  $("btnCiteUpload").textContent = "Cargando...";
+  setStatus("Leyendo archivo citaciones...");
+
+  try{
+    let rows = [];
+    if(file.name.toLowerCase().endsWith(".xlsx")){
+      const buf = await file.arrayBuffer();
+      rows = parseXLSX(buf);
+    }else{
+      const text = await file.text();
+      rows = parseDelimited(text);
+    }
+    if(!rows.length) throw new Error("Archivo vacío.");
+
+    let headers = rows[0].map(h => val(h).toLowerCase()).map(h => h.replace(/\s+/g," ").trim());
+    const missing = CITE_HEADERS.filter(h => !headers.includes(h));
+    if(missing.length){
+      throw new Error(`Faltan columnas: ${missing.join(", ")}. Encabezados detectados: ${headers.join(", ")}`);
+    }
+    const idx = {};
+    headers.forEach((h,i)=> idx[h]=i);
+
+    const dataRows = rows.slice(1).filter(r => r.some(c => val(c) !== ""));
+    if(!dataRows.length) throw new Error("No hay filas de datos.");
+
+    const raw = dataRows.map(r => ({
+      session_id: val(r[idx.session_id]),
+      documento: val(r[idx.documento])
+    })).filter(x => x.session_id && x.documento);
+
+    if(!raw.length) throw new Error("No hay filas válidas. Requiere session_id y documento.");
+
+    const bySession = new Map();
+    for(const r of raw){
+      if(!bySession.has(r.session_id)) bySession.set(r.session_id, []);
+      bySession.get(r.session_id).push(r.documento);
+    }
+
+    let totalInserted = 0;
+    const report = [];
+
+    for(const [session_id, docs] of bySession.entries()){
+      const uniqueDocs = Array.from(new Set(docs)).filter(Boolean);
+
+      const { data: emps, error: e1 } = await sb
+        .from("employees")
+        .select("id,documento")
+        .in("documento", uniqueDocs);
+
+      if(e1) throw e1;
+
+      const mapDocToId = new Map((emps||[]).map(e => [String(e.documento), e.id]));
+
+      const payload = [];
+      const notFound = [];
+
+      for(const doc of uniqueDocs){
+        const employee_id = mapDocToId.get(String(doc));
+        if(!employee_id){ notFound.push(doc); continue; }
+        payload.push({ session_id, employee_id, estado: "citada" });
+      }
+
+      if(payload.length){
+        let r = await sb.from("citations").upsert(payload, { onConflict: "session_id,employee_id" });
+        if(r.error && String(r.error.message||"").toLowerCase().includes("on conflict")){
+          r = await sb.from("citations").insert(payload);
+        }
+        if(r.error) throw r.error;
+
+        totalInserted += payload.length;
+      }
+
+      report.push({ session_id, enviados: uniqueDocs.length, citados: payload.length, no_encontrados: notFound });
+    }
+
+    msg.innerHTML = `<span class="ok">Citaciones cargadas.</span> Total procesadas: ${raw.length}. Total citadas: ${totalInserted}.`;
+    setStatus(`<span class="ok">Carga masiva completada.</span>`);
+    setLog({ citations_bulk_report: report });
+
+  }catch(e){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
+    setStatus(`<span class="err">Error carga masiva citaciones.</span>`);
+    setLog(e);
+  }finally{
+    $("btnCiteUpload").disabled = false;
+    $("btnCiteUpload").textContent = "Cargar citaciones";
+  }
+}
 
 /* =========================================================
    FORMADOR
+   NOTA: "Tarde" cuenta como asistencia. Para mantenerlo 100% funcional
+   SIN cambiar BD, guardamos "tarde" en localStorage (por dispositivo).
 ========================================================= */
+function lateKey(session_id, employee_id, session_date){
+  return `late|${session_id}|${employee_id}|${session_date}`;
+}
+function isLate(session_id, employee_id, session_date){
+  return localStorage.getItem(lateKey(session_id, employee_id, session_date)) === "1";
+}
+function setLate(session_id, employee_id, session_date, val){
+  if(val) localStorage.setItem(lateKey(session_id, employee_id, session_date), "1");
+  else localStorage.removeItem(lateKey(session_id, employee_id, session_date));
+}
+
 function wireTrainerHandlers(){
   $("btnRefreshTrainer").onclick = trainerInit;
 }
@@ -1130,17 +1589,17 @@ async function trainerLoadCitadosInto(session_id){
 
     const empIds = cit.map(c => c.employee_id);
 
-    // ✅ asistencia SOLO para la fecha seleccionada (incluye estado)
+    // asistencia SOLO para la fecha seleccionada
     const { data: at, error: e2 } = await sb
       .from("attendance_dates")
-      .select("employee_id, asistio, estado")
+      .select("employee_id, asistio")
       .eq("session_id", session_id)
       .eq("session_date", fechaSeleccionada)
       .in("employee_id", empIds);
 
     if(e2) throw e2;
 
-    const attMap = new Map((at || []).map(a => [a.employee_id, { asistio: a.asistio, estado: a.estado }]));
+    const attMap = new Map((at || []).map(a => [a.employee_id, a.asistio]));
 
     // total fechas de la sesión
     const { data: datesAll, error: e3 } = await sb
@@ -1153,7 +1612,7 @@ async function trainerLoadCitadosInto(session_id){
     const allFechas = (datesAll || []).map(d => d.fecha).filter(Boolean);
     const totalDays = allFechas.length || 0;
 
-    // asistencias true para todas las fechas (TARDE también cuenta porque asistio=true)
+    // asistencias true para todas las fechas
     let trueMap = new Map(); // employee_id -> count true
     if(allFechas.length){
       const { data: atAll, error: e4 } = await sb
@@ -1175,14 +1634,13 @@ async function trainerLoadCitadosInto(session_id){
     for(const c of cit){
       const emp = c.employees;
       const name = emp?.nombre ? `${emp.nombre} (${emp.documento || ""})` : (c.employee_id || "");
-
-      const cur = attMap.get(c.employee_id) || null;
-      const asistio = cur ? cur.asistio : null;
-      const estadoActual = cur ? (cur.estado || null) : null; // "tarde" o null
+      const asistio = attMap.has(c.employee_id) ? attMap.get(c.employee_id) : null;
 
       const attended = trueMap.get(c.employee_id) || 0;
       const apto = (totalDays > 0 && attended >= totalDays);
       const prog = (totalDays > 0) ? `${attended}/${totalDays} ${apto ? "· APTO" : "· NO APTO"}` : `0/0`;
+
+      const late = isLate(session_id, c.employee_id, fechaSeleccionada);
 
       table.insertAdjacentHTML("beforeend", `
         <div class="tr">
@@ -1190,23 +1648,23 @@ async function trainerLoadCitadosInto(session_id){
             ${esc(name)}
             <div class="small" style="margin-top:4px;opacity:.9;">
               <span class="${apto ? "ok":"warn"}">${esc(prog)}</span>
-              ${estadoActual === "tarde" ? `<span class="warn"> · TARDE</span>` : ``}
+              ${late ? `<span class="warn"> · TARDE</span>` : ``}
             </div>
           </div>
           <div>
             <button class="btnMini btnOk" type="button"
-              onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',true,null)"
-              ${asistio === true ? 'disabled' : ''}>Sí</button>
+              onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',true,false)"
+              ${asistio === true && !late ? 'disabled' : ''}>Sí</button>
           </div>
           <div>
             <button class="btnMini btnBad" type="button"
-              onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',false,null)"
+              onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',false,false)"
               ${asistio === false ? 'disabled' : ''}>No</button>
           </div>
           <div>
             <button class="btnMini btnGhost" type="button"
-              onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',true,'tarde')"
-              ${estadoActual === 'tarde' ? 'disabled' : ''}>Tarde</button>
+              onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',true,true)"
+              ${late ? 'disabled' : ''}>Tarde</button>
           </div>
         </div>
       `);
@@ -1222,7 +1680,7 @@ async function trainerLoadCitadosInto(session_id){
   }
 }
 
-window.trainerMark = async (session_id, employee_id, session_date, asistio, estado = null) => {
+window.trainerMark = async (session_id, employee_id, session_date, asistio, tarde=false) => {
   const sb = getSB();
   setStatus("Guardando asistencia...");
 
@@ -1232,30 +1690,33 @@ window.trainerMark = async (session_id, employee_id, session_date, asistio, esta
 
   if(!session_id){
     setStatus(`<span class="err">Error:</span> session_id vacío. Recarga la sesión y vuelve a intentar.`);
-    setLog({ error: "session_id vacío", session_id, employee_id, session_date, asistio, estado });
+    setLog({ error: "session_id vacío", session_id, employee_id, session_date, asistio, tarde });
     return;
   }
   if(!employee_id){
     setStatus(`<span class="err">Error:</span> employee_id vacío.`);
-    setLog({ error: "employee_id vacío", session_id, employee_id, session_date, asistio, estado });
+    setLog({ error: "employee_id vacío", session_id, employee_id, session_date, asistio, tarde });
     return;
   }
   if(!session_date){
     setStatus(`<span class="err">Error:</span> Debes seleccionar una fecha.`);
-    setLog({ error: "session_date vacío", session_id, employee_id, session_date, asistio, estado });
+    setLog({ error: "session_date vacío", session_id, employee_id, session_date, asistio, tarde });
     return;
   }
 
   try{
-    // ✅ TARDE = asistio true + estado="tarde"
-    const payload = { session_id, employee_id, session_date, asistio: !!asistio, estado: estado || null };
-    setLog({ attendance_dates_upsert_payload: payload });
+    // "Tarde" = asistio true (y lo marcamos en localStorage para mostrar TARDE)
+    const payload = { session_id, employee_id, session_date, asistio: !!asistio };
+    setLog({ attendance_dates_upsert_payload: payload, tarde });
 
     const { error } = await sb
       .from("attendance_dates")
       .upsert(payload, { onConflict: "session_id,employee_id,session_date" });
 
     if(error) throw error;
+
+    // guardar bandera tarde local (sin tocar BD)
+    setLate(session_id, employee_id, session_date, !!tarde);
 
     setStatus(`<span class="ok">Asistencia guardada.</span>`);
     await trainerLoadCitadosInto(session_id);
@@ -1303,12 +1764,3 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
-
-
-
-
-
-
-
-
-
