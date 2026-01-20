@@ -838,6 +838,142 @@ function wireAdminHandlers(){
   $("btnRefreshAdmin").onclick = adminRefreshAll;
   $("btnSearchEmp").onclick = adminSearchEmployees;
   $("btnCiteUpload").onclick = adminUploadCitations;
+  // =====================
+// CARGA MASIVA CITACIONES
+// =====================
+async function adminUploadCitations(){
+  const sb = getSB();
+  const file = $("citeFile")?.files?.[0];
+  const msg = $("citeUploadMsg");
+  msg.innerHTML = "";
+
+  if(!file){ alert("Selecciona un CSV o XLSX."); return; }
+
+  const selectedSession = $("citeSession")?.value || ""; // sesión seleccionada (opcional)
+
+  $("btnCiteUpload").disabled = true;
+  $("btnCiteUpload").textContent = "Cargando...";
+  setStatus("Leyendo archivo citaciones...");
+
+  try{
+    let rows = [];
+    if(file.name.toLowerCase().endsWith(".xlsx")){
+      const buf = await file.arrayBuffer();
+      rows = parseXLSX(buf);
+    }else{
+      const text = await file.text();
+      rows = parseDelimited(text);
+    }
+    if(!rows.length) throw new Error("Archivo vacío.");
+
+    // encabezados
+    let headers = rows[0].map(h => val(h).toLowerCase()).map(h => h.replace(/\s+/g," ").trim());
+
+    const hasSessionId = headers.includes("session_id");
+    const hasDocumento  = headers.includes("documento");
+
+    // Caso típico: subieron base de empleados por error
+    const looksLikeEmployees =
+      headers.includes("nombre") && headers.includes("cargo") && headers.includes("email") && headers.includes("area");
+
+    if(!hasDocumento){
+      throw new Error(`Falta columna obligatoria: documento. Encabezados detectados: ${headers.join(", ")}`);
+    }
+
+    // Si NO trae session_id, permitimos usar sesión seleccionada
+    if(!hasSessionId){
+      if(!selectedSession){
+        if(looksLikeEmployees){
+          throw new Error(
+            `Estás subiendo el archivo de EMPLEADOS (documento,nombre,cargo,...).\n\n` +
+            `Para CITACIONES necesitas:\n  session_id,documento\n\n` +
+            `O selecciona una sesión en el combo "Sesión" y vuelve a cargar: así usaré esa session_id para todos los documentos.`
+          );
+        }
+        throw new Error(
+          `Falta columna: session_id.\nEncabezados detectados: ${headers.join(", ")}\n\n` +
+          `Soluciones:\n1) Sube archivo con columnas session_id,documento\n2) O selecciona una sesión en el combo "Sesión" y sube un archivo que tenga al menos la columna documento.`
+        );
+      }
+    }
+
+    const idx = {};
+    headers.forEach((h,i)=> idx[h]=i);
+
+    const dataRows = rows.slice(1).filter(r => r.some(c => val(c) !== ""));
+    if(!dataRows.length) throw new Error("No hay filas de datos.");
+
+    // Normalizamos entrada
+    const raw = dataRows.map(r => ({
+      session_id: hasSessionId ? val(r[idx.session_id]) : selectedSession,
+      documento: val(r[idx.documento])
+    })).filter(x => x.session_id && x.documento);
+
+    if(!raw.length) throw new Error("No hay filas válidas. Requiere documento y session_id (en archivo o sesión seleccionada).");
+
+    // Agrupar por session_id
+    const bySession = new Map();
+    for(const r of raw){
+      if(!bySession.has(r.session_id)) bySession.set(r.session_id, []);
+      bySession.get(r.session_id).push(r.documento);
+    }
+
+    let totalInserted = 0;
+    const report = [];
+
+    for(const [session_id, docs] of bySession.entries()){
+      const uniqueDocs = Array.from(new Set(docs)).filter(Boolean);
+
+      // buscar employees por documento
+      const { data: emps, error: e1 } = await sb
+        .from("employees")
+        .select("id,documento")
+        .in("documento", uniqueDocs);
+
+      if(e1) throw e1;
+
+      const mapDocToId = new Map((emps||[]).map(e => [String(e.documento), e.id]));
+
+      const payload = [];
+      const notFound = [];
+
+      for(const doc of uniqueDocs){
+        const employee_id = mapDocToId.get(String(doc));
+        if(!employee_id){ notFound.push(doc); continue; }
+        payload.push({ session_id, employee_id, estado: "citada" });
+      }
+
+      if(payload.length){
+        let r = await sb.from("citations").upsert(payload, { onConflict: "session_id,employee_id" });
+        if(r.error && String(r.error.message||"").toLowerCase().includes("on conflict")){
+          r = await sb.from("citations").insert(payload);
+        }
+        if(r.error) throw r.error;
+
+        totalInserted += payload.length;
+      }
+
+      report.push({ session_id, enviados: uniqueDocs.length, citados: payload.length, no_encontrados: notFound });
+    }
+
+    msg.innerHTML = `<span class="ok">Citaciones cargadas.</span> Filas: ${raw.length}. Citadas: ${totalInserted}.`;
+    setStatus(`<span class="ok">Carga masiva completada.</span>`);
+    setLog({ citations_bulk_report: report });
+
+    // refrescar listas si aplica
+    if(STATE?.profile?.rol === "super_admin"){
+      await adminLoadSessions();
+      await adminLoadSessionSelects();
+    }
+
+  }catch(e){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
+    setStatus(`<span class="err">Error carga masiva citaciones.</span>`);
+    setLog(e);
+  }finally{
+    $("btnCiteUpload").disabled = false;
+    $("btnCiteUpload").textContent = "Cargar citaciones";
+  }
 }
 
 async function adminInit(){
@@ -1764,3 +1900,4 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
+
