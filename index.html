@@ -1535,42 +1535,35 @@ async function trainerLoadSessions(){
       return;
     }
 
-    cont.innerHTML = sessions.map(s => {
-      const trName = s.trainings?.nombre || "Entrenamiento";
-      return `
-        <div class="item" id="sess_${s.id}">
-          <div class="row" style="justify-content:space-between;">
-            <div><b>${esc(trName)}</b></div>
-            <span class="chip">${esc(s.estado || "—")}</span>
-          </div>
-          <div class="small" style="margin-top:6px;">Sesión · ${esc(s.fecha)} · ${esc(s.ciudad || "")}</div>
+   cont.innerHTML = sessions.map(s => {
+  const trName = s.trainings?.nombre || "Entrenamiento";
+  return `
+    <div class="item" id="sess_${s.id}">
+      <b>${esc(trName)}</b>
+      <div class="small">Sesión · ${esc(s.fecha)} · ${esc(s.ciudad || "")}</div>
 
-          <div class="row" style="margin-top:10px;">
-            <div class="col">
-              <label>Fecha a marcar</label>
-              <select class="dateSelect" data-session="${esc(s.id)}">
-                <option value="">Cargando fechas...</option>
-              </select>
-            </div>
-            <div class="col" style="min-width:170px;">
-              <label>&nbsp;</label>
-              <button class="btnMini btnGhost" type="button" onclick="trainerRefreshSession('${s.id}')">Recargar</button>
-            </div>
-          </div>
+      <label>Fecha</label>
+      <select class="dateSelect"></select>
 
-          <hr/>
-          <b>Citados</b>
-          <div class="small">Marca asistencia para la fecha seleccionada. “Tarde” cuenta como asistencia.</div>
+      <hr/>
 
-          <div class="tablelike" style="margin-top:10px;">
-            <div class="tr th">
-              <div>Empleado</div><div>Asistió</div><div>No asistió</div><div>Llegó tarde</div>
-            </div>
-            <div class="tr"><div class="small">Cargando...</div><div></div><div></div><div></div></div>
-          </div>
+      <label>Tema dictado (para esta fecha)</label>
+      <input class="temaInput" placeholder="Ej: Ascenso Técnico" />
+
+      <button class="btnMini btnGhost"
+        onclick="trainerSaveTema('${s.id}')">
+        Guardar tema
+      </button>
+
+      <div class="tablelike" style="margin-top:10px;">
+        <div class="tr th">
+          <div>Empleado</div><div>Asistió</div><div>No</div><div>Tarde</div>
         </div>
-      `;
-    }).join("");
+      </div>
+    </div>
+  `;
+}).join("");
+
 
     for(const s of sessions){
       await trainerLoadDatesInto(s.id);
@@ -1590,6 +1583,54 @@ async function trainerLoadSessions(){
 window.trainerRefreshSession = async (session_id) => {
   await trainerLoadDatesInto(session_id);
   await trainerLoadCitadosInto(session_id);
+};
+window.trainerSaveTema = async (session_id) => {
+  const sb = getSB();
+  const box = document.querySelector(`#sess_${session_id}`);
+  if(!box) return;
+
+  const fecha = box.querySelector(".dateSelect")?.selectedOptions?.[0]?.textContent;
+  const tema = box.querySelector(".temaInput")?.value?.trim();
+
+  if(!fecha){
+    alert("Selecciona una fecha");
+    return;
+  }
+  if(!tema){
+    alert("Escribe el tema dictado");
+    return;
+  }
+
+  const { data: cit } = await sb
+    .from("citations")
+    .select("employee_id")
+    .eq("session_id", session_id);
+
+  if(!cit?.length){
+    alert("No hay citados");
+    return;
+  }
+
+  const payload = cit.map(c => ({
+    session_id,
+    employee_id: c.employee_id,
+    session_date: fecha,
+    tema
+  }));
+
+  const { error } = await sb
+    .from("attendance_dates")
+    .upsert(payload, {
+      onConflict: "session_id,employee_id,session_date"
+    });
+
+  if(error){
+    alert("Error guardando tema");
+    console.error(error);
+    return;
+  }
+
+  alert("Tema guardado");
 };
 
 async function trainerLoadDatesInto(session_id){
@@ -1631,15 +1672,19 @@ async function trainerLoadCitadosInto(session_id){
 
   const table = sessBox.querySelector(".tablelike");
   const sel = sessBox.querySelector(".dateSelect");
+
   const session_date_id = sel?.value || null;
-  const fechaSeleccionada = sel?.options?.[sel.selectedIndex]?.textContent?.trim() || "";
+  const fechaSeleccionada = (sel?.selectedOptions?.[0]?.textContent || "").trim();
 
   const header = table.querySelector(".tr.th");
   table.innerHTML = "";
   table.appendChild(header);
 
   if(!session_date_id || !fechaSeleccionada){
-    table.insertAdjacentHTML("beforeend", `<div class="tr"><div class="small"><span class="warn">Selecciona una fecha.</span></div><div></div><div></div><div></div></div>`);
+    table.insertAdjacentHTML(
+      "beforeend",
+      `<div class="tr"><div class="small"><span class="warn">Selecciona una fecha.</span></div><div></div><div></div><div></div></div>`
+    );
     return;
   }
 
@@ -1660,15 +1705,23 @@ async function trainerLoadCitadosInto(session_id){
     const empIds = cit.map(c => c.employee_id);
 
     const { data: at, error: e2 } = await sb
-      .from("attendance_dates")
-      .select("employee_id, asistio")
-      .eq("session_id", session_id)
-      .eq("session_date", fechaSeleccionada)
-      .in("employee_id", empIds);
+  .from("attendance_dates")
+  .select("employee_id, asistio, tema")
+  .eq("session_id", session_id)
+  .eq("session_date", fechaSeleccionada)
+  .in("employee_id", empIds);
 
-    if(e2) throw e2;
+if(e2) throw e2;
 
-    const attMap = new Map((at || []).map(a => [a.employee_id, a.asistio]));
+// ✅ Cargar tema guardado (si existe) para esta fecha
+const temaInput = sessBox.querySelector(".temaInput");
+const t = (at || []).find(x => (x.tema || "").trim() !== "")?.tema;
+if(temaInput){
+  temaInput.value = t ? t : "";
+}
+
+const attMap = new Map((at || []).map(a => [a.employee_id, a.asistio]));
+
 
     const { data: datesAll, error: e3 } = await sb
       .from("session_dates")
@@ -1829,3 +1882,4 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
+
