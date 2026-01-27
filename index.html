@@ -299,6 +299,17 @@ function esc(s){
     .replaceAll('"',"&quot;").replaceAll("'","&#039;");
 }
 function val(x){ return String(x ?? "").trim(); }
+function normDoc(x){
+  return String(x ?? "")
+    .trim()
+    .replace(/[^\d]/g, "");
+}
+
+function normEmail(x){
+  const s = String(x ?? "").trim().toLowerCase();
+  return s || null;
+}
+
 function todayISO(){
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -1943,6 +1954,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
+
 
 
 
