@@ -1257,9 +1257,10 @@ if(!raw.length){
 }
 
 // 2) DEDUPLICAR por documento (si viene repetido en el Excel)
+//    (el último registro del archivo gana)
 const map = new Map();
 for(const e of raw){
-  map.set(e.documento, e); // el último registro gana
+  map.set(e.documento, e);
 }
 const payload = [...map.values()];
 
@@ -1942,6 +1943,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
+
 
 
 
