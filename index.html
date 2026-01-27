@@ -982,11 +982,13 @@ async function adminLoadSessionSelects(){
   const sel = $("citeSession");
   sel.innerHTML = `<option value="">Cargando sesiones...</option>`;
 
-  const { data, error } = await sb
-    .from("sessions")
-    .select(`id,fecha,ciudad,estado, trainings ( nombre )`)
-    .order("fecha", { ascending:false })
-    .limit(150);
+   const { data, error } = await sb
+  .from("sessions")
+  .select(`id,fecha,ciudad,estado, trainings ( nombre )`)
+  .not("estado","eq","cerrada")
+  .order("fecha", { ascending:false })
+  .limit(150);
+
 
   if(error){
     sel.innerHTML = `<option value="">(error)</option>`;
@@ -1954,6 +1956,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
+
 
 
 
