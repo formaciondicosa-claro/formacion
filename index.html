@@ -1241,15 +1241,34 @@ async function adminUploadEmployees(){
     const dataRows = rows.slice(1).filter(r => r.some(c => val(c) !== ""));
     if(!dataRows.length) throw new Error("No hay filas de datos.");
 
-    const payload = dataRows.map(r => ({
-      documento: val(r[idx.documento]),
-      nombre: val(r[idx.nombre]),
-      cargo: val(r[idx.cargo]),
-      area: val(r[idx.area]),
-      supervisor: val(r[idx.supervisor]),
-      email: val(r[idx.email]),
-      estado: val(r[idx.estado]) || "activo"
-    })).filter(x => x.documento && x.nombre);
+   // 1) construir y NORMALIZAR
+const raw = dataRows.map(r => ({
+  documento: normDoc(r[idx.documento]),
+  nombre: val(r[idx.nombre]),
+  cargo: val(r[idx.cargo]),
+  area: val(r[idx.area]),
+  supervisor: val(r[idx.supervisor]),
+  email: normEmail(r[idx.email]),
+  estado: val(r[idx.estado]) || "activo"
+})).filter(x => x.documento && x.nombre);
+
+if(!raw.length){
+  throw new Error("No hay registros válidos (requiere documento y nombre).");
+}
+
+// 2) DEDUPLICAR por documento (si viene repetido en el Excel)
+const map = new Map();
+for(const e of raw){
+  map.set(e.documento, e); // el último registro gana
+}
+const payload = [...map.values()];
+
+// aviso si había duplicados
+const duplicados = raw.length - payload.length;
+if(duplicados > 0){
+  msg.innerHTML = `<span class="warn">Aviso:</span> Se encontraron ${duplicados} documentos repetidos en el archivo. Se usó el último registro de cada uno.<br/>`;
+}
+
 
     if(!payload.length) throw new Error("No hay registros válidos (requiere documento y nombre).");
 
@@ -1923,5 +1942,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
+
 
 
