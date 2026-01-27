@@ -952,8 +952,15 @@ async function adminLoadSessions(){
           <div>formador_user_id</div><div><code>${esc(s.formador_user_id || "")}</code></div>
         </div>
         <div class="actions">
-          <button class="btnMini btnDanger" type="button" onclick="adminDeleteSession('${s.id}')">Eliminar sesión</button>
-        </div>
+  ${
+    (String(s.estado||"").toLowerCase() === "cerrada")
+    ? `<button class="btnMini btnGhost" type="button" onclick="adminSetSessionStatus('${s.id}','programada')">Reabrir</button>`
+    : `<button class="btnMini btnGhost" type="button" onclick="adminSetSessionStatus('${s.id}','cerrada')">Cerrar sesión</button>`
+  }
+  <button class="btnMini btnDanger" type="button" onclick="adminDeleteSession('${s.id}')">Eliminar sesión</button>
+</div>
+
+          
       </div>
     `;
   }).join("");
@@ -1524,8 +1531,9 @@ async function trainerLoadSessions(){
       .from("sessions")
       .select(`id, fecha, ciudad, estado, training_id, trainings ( nombre )`)
       .eq("formador_user_id", user.id)
-      .order("fecha", { ascending:false })
-      .limit(50);
+.not("estado","eq","cerrada")
+.order("fecha", { ascending:false })
+.limit(50);
 
     if(error) throw error;
 
@@ -1878,8 +1886,42 @@ document.addEventListener("DOMContentLoaded", async () => {
     setLog(e);
   }
 });
+  window.adminSetSessionStatus = async (session_id, estado) => {
+  const sb = getSB();
+  session_id = (session_id ?? "").toString().trim();
+  estado = (estado ?? "").toString().trim();
+
+  if(!session_id) return alert("session_id vacío");
+  if(!estado) return alert("estado vacío");
+
+  const action = (estado === "cerrada") ? "Cerrar" : "Reabrir";
+  if(!confirm(`¿${action} esta sesión?\n\nsession_id: ${session_id}\nNuevo estado: ${estado}`)) return;
+
+  try{
+    setStatus(`Actualizando estado a <code>${esc(estado)}</code>...`);
+    const { error } = await sb
+      .from("sessions")
+      .update({ estado })
+      .eq("id", session_id);
+
+    if(error) throw error;
+
+    setStatus(`<span class="ok">Listo.</span> Sesión actualizada a <code>${esc(estado)}</code>.`);
+    setLog({ session_status_updated: { session_id, estado } });
+
+    // refresca panel admin + selector citaciones
+    await adminLoadSessions();
+    await adminLoadSessionSelects();
+  }catch(e){
+    setStatus(`<span class="err">Error:</span> ${esc(e.message || e)}`);
+    setLog(e);
+    alert("No se pudo actualizar el estado. Revisa consola/log.");
+  }
+};
+
 </script>
 
 </body>
 </html>
+
 
