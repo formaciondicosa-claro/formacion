@@ -282,7 +282,7 @@ code{color:#fff;}
 
         <hr/>
         <b>Resumen por fecha</b>
-        <div class="small">Basado en <code>attendance_dates</code> y citaciones. Incluye “tema visto”.</div>
+        <div class="small">Basado en <code>session_date</code> y citaciones. Incluye “tema visto”.</div>
 
         <div class="tablelike" style="margin-top:10px;" id="summaryByDate">
           <div class="tr th">
@@ -691,7 +691,7 @@ async function loadAttendanceForAllDates(session_id){
   // 1) ASISTENCIA (solo citados)
   if(empIds.length){
     const { data: asisRows, error: e1 } = await sb
-     .from("attendance_dates")
+     .from("session_date")
 .select("session_date, employee_id, asistio, estado")
 .eq("session_id", session_id)
 .in("session_date", fechas)
@@ -711,7 +711,7 @@ async function loadAttendanceForAllDates(session_id){
 
   // 2) TEMA (sin filtrar employee_id)
   const { data: temaRows, error: e2 } = await sb
-    .from("attendance_dates")
+    .from("session_date")
     .select("session_date, tema")
     .eq("session_id", session_id)
     .in("session_date", fechas)
@@ -945,7 +945,7 @@ async function buscarHistorialColaborador(){
 
     // ✅ Traemos también formador_user_id para poder mostrar nombre del formador
     const { data, error } = await sb
-      .from("attendance_dates")
+      .from("session_date")
       .select(`
         session_id,
         session_date,
@@ -1128,6 +1128,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
