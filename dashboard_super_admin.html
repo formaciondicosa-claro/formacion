@@ -692,15 +692,15 @@ async function loadAttendanceForAllDates(session_id){
   if(empIds.length){
     const { data: asisRows, error: e1 } = await sb
      .from("attendance_dates")
-.select("date, employee_id, asistio, estado")
+.select("session_date, employee_id, asistio, estado")
 .eq("session_id", session_id)
-.in("date", fechas)
+.in("session_date", fechas)
       .in("employee_id", empIds);
 
     if(e1) throw e1;
 
     for(const row of (asisRows || [])){
-      const f = row.date;
+      const f = row.session_date;
       if(!STATE.attendanceByDate.has(f)) STATE.attendanceByDate.set(f, new Map());
       STATE.attendanceByDate.get(f).set(row.employee_id, {
         asistio: row.asistio,
@@ -1128,5 +1128,6 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
