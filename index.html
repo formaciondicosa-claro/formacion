@@ -1672,9 +1672,9 @@ async function trainerLoadSessions(){
       .from("sessions")
       .select(`id, fecha, ciudad, estado, training_id, trainings ( nombre )`)
       .eq("formador_user_id", user.id)
-.not("estado","eq","cerrada")
-.order("fecha", { ascending:false })
-.limit(50);
+      .not("estado","eq","cerrada")
+      .order("fecha", { ascending:false })
+      .limit(50);
 
     if(error) throw error;
 
@@ -1684,35 +1684,41 @@ async function trainerLoadSessions(){
       return;
     }
 
-   cont.innerHTML = sessions.map(s => {
-  const trName = s.trainings?.nombre || "Entrenamiento";
-  return `
-    <div class="item" id="sess_${s.id}">
-      <b>${esc(trName)}</b>
-      <div class="small">Sesión · ${esc(s.fecha)} · ${esc(s.ciudad || "")}</div>
+    cont.innerHTML = sessions.map(s => {
+      const trName = s.trainings?.nombre || "Entrenamiento";
+      return `
+        <div class="item" id="sess_${s.id}">
+          <b>${esc(trName)}</b>
+          <div class="small">Sesión · ${esc(s.fecha)} · ${esc(s.ciudad || "")}</div>
 
-      <label>Fecha</label>
-      <select class="dateSelect"></select>
+          <label>Fecha</label>
+          <select class="dateSelect"></select>
 
-      <hr/>
+          <hr/>
 
-      <label>Tema dictado (para esta fecha)</label>
-      <input class="temaInput" placeholder="Ej: Ascenso Técnico" />
+          <label>Tema dictado (para esta fecha)</label>
+          <input class="temaInput" placeholder="Ej: Ascenso Técnico" />
 
-      <button class="btnMini btnGhost"
-        onclick="trainerSaveTema('${s.id}')">
-        Guardar tema
-      </button>
+          <button class="btnMini btnGhost" type="button"
+            onclick="trainerSaveTema('${s.id}')">
+            Guardar tema
+          </button>
 
-      <div class="tablelike" style="margin-top:10px;">
-        <div class="tr th">
-          <div>Empleado</div><div>Asistió</div><div>No</div><div>Tarde</div>
+          <div class="actions" style="margin-top:10px;">
+            <button class="btnMini btnGhost" type="button"
+              onclick="trainerExportSessionCSV('${s.id}')">
+              Exportar asistencia (CSV)
+            </button>
+          </div>
+
+          <div class="tablelike" style="margin-top:10px;">
+            <div class="tr th">
+              <div>Empleado</div><div>Asistió</div><div>No</div><div>Tarde</div>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-  `;
-}).join("");
-
+      `;
+    }).join("");
 
     for(const s of sessions){
       await trainerLoadDatesInto(s.id);
@@ -1723,12 +1729,14 @@ async function trainerLoadSessions(){
     setLog({ trainer_sessions: sessions });
 
   }catch(err){
-    cont.innerHTML = `<div class="item"><div class="small"><span class="err">Error:</span> ${esc(err.message || err)}</div></div>`;
+    cont.innerHTML = `
+      <div class="item">
+        <div class="small"><span class="err">Error:</span> ${esc(err.message || err)}</div>
+      </div>`;
     setStatus(`<span class="err">Error cargando sesiones.</span>`);
     setLog(err);
   }
 }
-
 window.trainerRefreshSession = async (session_id) => {
   await trainerLoadDatesInto(session_id);
   await trainerLoadCitadosInto(session_id);
@@ -2059,11 +2067,129 @@ document.addEventListener("DOMContentLoaded", async () => {
     alert("No se pudo actualizar el estado. Revisa consola/log.");
   }
 };
+window.trainerExportSessionCSV = async (session_id) => {
+  const sb = getSB();
+  session_id = (session_id ?? "").toString().trim();
+  if(!session_id) return alert("session_id vacío");
 
+  try{
+    setStatus("Preparando exportación...");
+
+    // 1) Datos básicos de la sesión + entrenamiento
+    const { data: sess, error: e0 } = await sb
+      .from("sessions")
+      .select("id,fecha,ciudad, trainings ( nombre )")
+      .eq("id", session_id)
+      .maybeSingle();
+    if(e0) throw e0;
+
+    const entrenamiento = sess?.trainings?.nombre || "Entrenamiento";
+    const ciudad = sess?.ciudad || "";
+    const fecha_inicio = sess?.fecha || "";
+
+    // 2) Fechas reales de la sesión
+    const { data: dates, error: e1 } = await sb
+      .from("session_dates")
+      .select("fecha")
+      .eq("session_id", session_id)
+      .order("fecha", { ascending:true });
+    if(e1) throw e1;
+
+    const allFechas = (dates || []).map(d => d.fecha).filter(Boolean);
+    if(!allFechas.length){
+      alert("Esta sesión no tiene fechas configuradas (session_dates).");
+      return;
+    }
+
+    // 3) Citados + employees
+    const { data: cit, error: e2 } = await sb
+      .from("citations")
+      .select(`employee_id, employees ( documento, nombre )`)
+      .eq("session_id", session_id);
+    if(e2) throw e2;
+
+    if(!cit?.length){
+      alert("Esta sesión no tiene citados.");
+      return;
+    }
+
+    const empIds = cit.map(c => c.employee_id).filter(Boolean);
+
+    // 4) Asistencias de todas las fechas (y tema)
+    const { data: atAll, error: e3 } = await sb
+      .from("attendance_dates")
+      .select("employee_id, session_date, asistio, tema")
+      .eq("session_id", session_id)
+      .in("session_date", allFechas)
+      .in("employee_id", empIds);
+    if(e3) throw e3;
+
+    // index: employee_id|fecha -> {asistio, tema}
+    const mapAtt = new Map();
+    for(const r of (atAll || [])){
+      const k = `${r.employee_id}|${r.session_date}`;
+      mapAtt.set(k, { asistio: r.asistio, tema: r.tema || "" });
+    }
+
+    // CSV
+    const headers = [
+      "sesion_id","entrenamiento","ciudad","fecha_inicio_sesion",
+      "session_date","documento","nombre","asistio","tema"
+    ];
+
+    const lines = [];
+    lines.push(headers.join(","));
+
+    // para cada fecha y cada citado, sacamos una fila
+    for(const f of allFechas){
+      for(const c of cit){
+        const emp = c.employees || {};
+        const doc = (emp.documento ?? "").toString().replaceAll('"','""');
+        const nom = (emp.nombre ?? "").toString().replaceAll('"','""');
+
+        const k = `${c.employee_id}|${f}`;
+        const att = mapAtt.get(k);
+
+        // asistio: true/false/vacío
+        const asistio = (att?.asistio === true) ? "SI" : (att?.asistio === false ? "NO" : "");
+
+        // tema: si está en ese registro; si no, vacío
+        const tema = (att?.tema ?? "").toString().replaceAll('"','""');
+
+        const row = [
+          session_id,
+          `"${entrenamiento.replaceAll('"','""')}"`,
+          `"${ciudad.replaceAll('"','""')}"`,
+          fecha_inicio,
+          f,
+          `"${doc}"`,
+          `"${nom}"`,
+          asistio,
+          `"${tema}"`
+        ];
+        lines.push(row.join(","));
+      }
+    }
+
+    const csv = lines.join("\n");
+    const safeName = `${entrenamiento}`.trim().slice(0,50).replace(/[\\/:*?"<>|]/g,"-");
+    const filename = `asistencia_${safeName}_${session_id.slice(0,8)}.csv`;
+
+    downloadTextFile(csv, filename, "text/csv;charset=utf-8");
+    setStatus(`<span class="ok">Exportación lista.</span> Archivo: <code>${esc(filename)}</code>`);
+    setLog({ export_csv: { session_id, fechas: allFechas.length, citados: cit.length } });
+
+  }catch(e){
+    setStatus(`<span class="err">Error exportando:</span> ${esc(e.message || e)}`);
+    setLog(e);
+    alert("No se pudo exportar. Revisa el panel de log.");
+  }
+};
 </script>
 
 </body>
 </html>
+
 
 
 
