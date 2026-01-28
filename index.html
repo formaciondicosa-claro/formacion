@@ -755,9 +755,28 @@ function renderTrainerRight(){
     <h3>Mis sesiones</h3>
     <div class="small">Sesiones donde tú eres el formador. Selecciona la fecha y marca asistencia.</div>
     <hr/>
+
+    <h3>⚠️ Alertas de abandono</h3>
+    <div class="small">
+      Personas con <b>3 o más días consecutivos</b> sin asistencia en sesiones multidiarias (solo tus sesiones).
+    </div>
+
+    <div class="tablelike" style="margin-top:10px;" id="absenceAlertsTrainer">
+      <div class="tr th" style="grid-template-columns: 1fr 120px 1fr 120px 120px 70px;">
+        <div>Empleado</div>
+        <div>Documento</div>
+        <div>Sesión</div>
+        <div>Desde</div>
+        <div>Hasta</div>
+        <div>Días</div>
+      </div>
+    </div>
+
+    <hr/>
     <div id="trainerSessions" class="list"></div>
   `;
 }
+
 
 /* =========================================================
    BOOT
@@ -1548,8 +1567,97 @@ function wireTrainerHandlers(){
 }
 
 async function trainerInit(){
-  await trainerLoadSessions();
+  await trainerLoadAbsenceAlerts();   // ✅ alertas primero
+  await trainerLoadSessions();        // ✅ luego sesiones
 }
+  async function trainerLoadAbsenceAlerts(){
+  const sb = getSB();
+  const cont = $("absenceAlertsTrainer");
+  if(!cont) return;
+
+  // header
+  cont.innerHTML = `
+    <div class="tr th" style="grid-template-columns: 1fr 120px 1fr 120px 120px 70px;">
+      <div>Empleado</div>
+      <div>Documento</div>
+      <div>Sesión</div>
+      <div>Desde</div>
+      <div>Hasta</div>
+      <div>Días</div>
+    </div>
+  `;
+
+  try{
+    const { data: { user } } = await sb.auth.getUser();
+    if(!user) throw new Error("No hay usuario autenticado.");
+
+    // 1) traer alertas
+    const { data: rows, error } = await sb
+      .from("v_absence_alerts_3days")
+      .select("session_id,employee_id,documento,nombre,start_date,end_date,consecutive_absences")
+      .order("end_date", { ascending:false })
+      .limit(200);
+
+    if(error) throw error;
+
+    if(!rows?.length){
+      cont.innerHTML += `
+        <div class="tr" style="grid-template-columns: 1fr 120px 1fr 120px 120px 70px;">
+          <div class="ok">Sin alertas activas</div><div></div><div></div><div></div><div></div><div></div>
+        </div>
+      `;
+      return;
+    }
+
+    // 2) filtrar SOLO sesiones del formador actual
+    const sessionIds = [...new Set(rows.map(r => r.session_id).filter(Boolean))];
+    if(!sessionIds.length) return;
+
+   const { data: sess, error: e2 } = await sb
+  .from("sessions")
+  .select("id, formador_user_id, trainings ( nombre )")
+  .in("id", sessionIds);
+    if(e2) throw e2;
+    const mine = new Set((sess || [])
+      .filter(s => s.formador_user_id === user.id)
+      .map(s => s.id)
+    );
+
+    const sessionNameMap = new Map((sess || []).map(s => [s.id, (s.trainings?.nombre || "Sesión")]))
+
+    const filtered = rows.filter(r => mine.has(r.session_id));
+
+    if(!filtered.length){
+      cont.innerHTML += `
+        <div class="tr" style="grid-template-columns: 1fr 120px 1fr 120px 120px 70px;">
+          <div class="ok">Sin alertas activas en tus sesiones</div><div></div><div></div><div></div><div></div><div></div>
+        </div>
+      `;
+      return;
+    }
+
+    for(const r of filtered){
+      cont.innerHTML += `
+        <div class="tr" style="grid-template-columns: 1fr 120px 1fr 120px 120px 70px;">
+          <div>${esc(r.nombre || "")}</div>
+          <div>${esc(r.documento || "")}</div>
+          <div class="small">${esc(sessionNameMap.get(r.session_id) || "Sesión")}<br/><code>${esc(r.session_id)}</code></div>
+          <div>${esc(r.start_date || "")}</div>
+          <div>${esc(r.end_date || "")}</div>
+          <div class="warn"><b>${esc(r.consecutive_absences ?? "")}</b></div>
+        </div>
+      `;
+    }
+
+  }catch(e){
+    cont.innerHTML += `
+      <div class="tr" style="grid-template-columns: 1fr 120px 1fr 120px 120px 70px;">
+        <div class="err">${esc(e.message || e)}</div><div></div><div></div><div></div><div></div><div></div>
+      </div>
+    `;
+  }
+}
+
 
 async function trainerLoadSessions(){
   const sb = getSB();
@@ -1956,6 +2064,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </body>
 </html>
+
 
 
 
