@@ -691,16 +691,16 @@ async function loadAttendanceForAllDates(session_id){
   // 1) ASISTENCIA (solo citados)
   if(empIds.length){
     const { data: asisRows, error: e1 } = await sb
-      .from("attendance_dates")
-      .select("session_date, employee_id, asistio, estado")
-      .eq("session_id", session_id)
-      .in("session_date", fechas)
+     .from("attendance_dates")
+.select("date, employee_id, asistio, estado")
+.eq("session_id", session_id)
+.in("date", fechas)
       .in("employee_id", empIds);
 
     if(e1) throw e1;
 
     for(const row of (asisRows || [])){
-      const f = row.session_date;
+      const f = row.date;
       if(!STATE.attendanceByDate.has(f)) STATE.attendanceByDate.set(f, new Map());
       STATE.attendanceByDate.get(f).set(row.employee_id, {
         asistio: row.asistio,
@@ -790,7 +790,7 @@ function renderSessionDetail(){
     sumYes += yes;
     sumPct += pct;
 
-    rows.push({ fecha, cited: citedTotal, yes, no, pct, tema: d.tema_visto || "" });
+   rows.push({ fecha, cited: citedTotal, yes, no, pct, tema: getTemaForFecha(fecha) || "" });
   }
 
   const avgPct = datesTotal ? (sumPct / datesTotal) : 0;
