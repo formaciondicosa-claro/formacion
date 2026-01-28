@@ -393,6 +393,7 @@ let STATE = {
   sessionDates:[], // ahora: {fecha, tema_visto}
   citations:[],
   attendanceByDate: new Map(),
+  temaByDate: new Map(),
 };
 
 /* =======================
@@ -680,32 +681,74 @@ async function loadCitations(session_id){
 async function loadAttendanceForAllDates(session_id){
   const sb = getSB();
   STATE.attendanceByDate = new Map();
+  STATE.temaByDate = new Map(); // ✅ NUEVO
 
   const fechas = STATE.sessionDates.map(d => d.fecha);
   const empIds = STATE.citations.map(c => c.employee_id).filter(Boolean);
 
-  if(!fechas.length || !empIds.length) return;
+  if(!fechas.length) return;
 
-  const { data, error } = await sb
+  // 1) ASISTENCIA (solo citados)
+  if(empIds.length){
+    const { data: asisRows, error: e1 } = await sb
+      .from("attendance_dates")
+      .select("session_date, employee_id, asistio, estado")
+      .eq("session_id", session_id)
+      .in("session_date", fechas)
+      .in("employee_id", empIds);
+
+    if(e1) throw e1;
+
+    for(const row of (asisRows || [])){
+      const f = row.session_date;
+      if(!STATE.attendanceByDate.has(f)) STATE.attendanceByDate.set(f, new Map());
+      STATE.attendanceByDate.get(f).set(row.employee_id, {
+        asistio: row.asistio,
+        estado: row.estado || null
+      });
+    }
+  }
+
+  // 2) TEMA (sin filtrar employee_id)
+  const { data: temaRows, error: e2 } = await sb
     .from("attendance_dates")
-    .select("session_date, employee_id, asistio, estado")
+    .select("session_date, tema")
     .eq("session_id", session_id)
     .in("session_date", fechas)
-    .in("employee_id", empIds);
+    .not("tema", "is", null);
 
-  if(error) throw error;
+  if(e2) throw e2;
 
-  for(const row of (data || [])){
-    const f = row.session_date;
-    if(!STATE.attendanceByDate.has(f)) STATE.attendanceByDate.set(f, new Map());
-    STATE.attendanceByDate.get(f).set(row.employee_id, { asistio: row.asistio, estado: row.estado || null });
+  const counterByDate = new Map(); // fecha -> Map(tema->count)
+
+  for(const r of (temaRows || [])){
+    const f = r.session_date;
+    const t = (r.tema ?? "").toString().trim();
+    if(!t) continue;
+
+    if(!counterByDate.has(f)) counterByDate.set(f, new Map());
+    const m = counterByDate.get(f);
+    m.set(t, (m.get(t) || 0) + 1);
+  }
+
+  for(const [f, m] of counterByDate.entries()){
+    let bestTema = "";
+    let bestCount = -1;
+    for(const [t, c] of m.entries()){
+      if(c > bestCount){
+        bestCount = c;
+        bestTema = t;
+      }
+    }
+    if(bestTema) STATE.temaByDate.set(f, bestTema);
   }
 }
 
+
 function getTemaForFecha(fecha){
-  const d = (STATE.sessionDates || []).find(x => x.fecha === fecha);
-  return (d && (d.tema_visto ?? "")) ? String(d.tema_visto) : "";
+  return (STATE.temaByDate.get(fecha) || "").toString();
 }
+
 
 function renderSessionDetail(){
   const s = STATE.selectedSession;
@@ -1085,4 +1128,5 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
