@@ -139,6 +139,9 @@ code{color:#fff;}
   color:var(--muted);
   font-size:12px;
 }
+  #absenceAlerts .tr{
+  grid-template-columns: 1fr 120px 1fr 120px 120px 70px;
+}
 
 /* ✅ Tabla resumen por fecha: 6 columnas (incluye tema) */
 #summaryByDate .tr{
@@ -249,11 +252,29 @@ code{color:#fff;}
         </div>
       </div>
 
-      <!-- RIGHT -->
-      <div class="panel">
-        <h3>Detalle de sesión</h3>
-        <div class="small" id="sessionMeta">Selecciona una sesión a la izquierda.</div>
+     <!-- RIGHT -->
+<div class="panel">
 
+  <h3>⚠️ Alertas de abandono</h3>
+  <div class="small">
+    Personas con <b>3 o más días consecutivos</b> sin asistencia en sesiones multidiarias.
+  </div>
+
+  <div class="tablelike" style="margin-top:10px;" id="absenceAlerts">
+    <div class="tr th">
+      <div>Empleado</div>
+      <div>Documento</div>
+      <div>Sesión</div>
+      <div>Desde</div>
+      <div>Hasta</div>
+      <div>Días</div>
+    </div>
+  </div>
+
+  <hr/>
+
+  <h3>Detalle de sesión</h3>
+  <div class="small" id="sessionMeta">Selecciona una sesión a la izquierda.</div>
         <hr/>
         <div class="kpis">
           <div class="kpi"><div class="lbl">Citados (total)</div><div class="val" id="kCited">—</div><div class="hint" id="kCitedHint"></div></div>
@@ -497,9 +518,10 @@ async function boot(){
 async function initData(){
   setPill("Cargando…", "info");
   await Promise.all([ loadTrainings(), loadTrainers() ]);
-  await loadSessions();
+  await Promise.all([ loadSessions(), loadAbsenceAlerts() ]); // ✅
   setPill("Listo", "ok");
 }
+
 
 async function loadTrainings(){
   const sb = getSB();
@@ -628,6 +650,61 @@ function renderSessionsList(){
     `;
   }).join("");
 }
+  async function loadAbsenceAlerts(){
+  const sb = getSB();
+  const cont = $("absenceAlerts");
+
+  cont.innerHTML = `
+    <div class="tr th">
+      <div>Empleado</div>
+      <div>Documento</div>
+      <div>Sesión</div>
+      <div>Desde</div>
+      <div>Hasta</div>
+      <div>Días</div>
+    </div>
+  `;
+
+  const { data, error } = await sb
+    .from("v_absence_alerts_3days")
+    .select("session_id,employee_id,documento,nombre,start_date,end_date,consecutive_absences,unmarked_days")
+    .order("end_date", { ascending:false })
+    .limit(100);
+
+  if(error){
+    cont.innerHTML += `
+      <div class="tr">
+        <div class="err">${esc(error.message)}</div>
+        <div></div><div></div><div></div><div></div><div></div>
+      </div>
+    `;
+    return;
+  }
+
+  if(!data || !data.length){
+    cont.innerHTML += `
+      <div class="tr">
+        <div class="ok">Sin alertas activas</div>
+        <div></div><div></div><div></div><div></div><div></div>
+      </div>
+    `;
+    return;
+  }
+
+  for(const r of data){
+    cont.innerHTML += `
+      <div class="tr">
+        <div>${esc(r.nombre || "")}</div>
+        <div>${esc(r.documento || "")}</div>
+        <div class="small"><code>${esc(r.session_id || "")}</code></div>
+        <div>${esc(r.start_date || "")}</div>
+        <div>${esc(r.end_date || "")}</div>
+        <div class="warn"><b>${esc(r.consecutive_absences ?? "")}</b></div>
+      </div>
+    `;
+  }
+}
+
 
 /* =======================
    SESSION DETAIL
@@ -1128,6 +1205,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
