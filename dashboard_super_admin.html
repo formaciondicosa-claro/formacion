@@ -208,12 +208,11 @@ code{color:#fff;}
           <div class="col">
             <label>Estado</label>
             <select id="fState">
-              <option value="">Todos</option>
-              <option value="programada">programada</option>
-              <option value="en_curso">en_curso</option>
-              <option value="cerrada">cerrada</option>
-              <option value="cancelada">cancelada</option>
-            </select>
+  <option value="">Todos</option>
+  <option value="programada">programada</option>
+  <option value="en_curso">en_curso</option>
+  <option value="cancelada">cancelada</option>
+</select>
           </div>
         </div>
 
@@ -559,7 +558,7 @@ async function loadSessions(){
     .select("id,training_id,fecha,ciudad,formador_user_id,estado, trainings(nombre)")
     .order("fecha", { ascending:false })
     .limit(300);
-
+  q = q.neq("estado", "cerrada"); // ✅ no mostrar cerradas
   if(training_id) q = q.eq("training_id", training_id);
   if(formador) q = q.eq("formador_user_id", formador);
   if(estado) q = q.eq("estado", estado);
@@ -1086,3 +1085,4 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
