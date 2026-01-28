@@ -699,9 +699,42 @@ function renderAdminLeft(){
 
       <div id="empResults" class="list" style="margin-top:10px;"></div>
       <div id="citeMsg" class="small" style="margin-top:8px;"></div>
+    </div>
 
-      <hr/>
+    <hr/>
 
+    <div class="item">
+      <b>5) Registrar incapacidad (Super Admin)</b>
+      <div class="small">Registra incapacidad por <b>documento</b>.</div>
+
+      <label>Documento</label>
+      <input id="incDoc" placeholder="Ej: 1030123456" />
+
+      <div class="row">
+        <div class="col">
+          <label>Desde</label>
+          <input id="incDesde" type="date" />
+        </div>
+        <div class="col">
+          <label>Hasta</label>
+          <input id="incHasta" type="date" />
+        </div>
+      </div>
+
+      <label>Observación (opcional)</label>
+      <input id="incObs" placeholder="Ej: Incapacidad médica / ARL / Accidente" />
+
+      <div class="actions" style="margin-top:10px;">
+        <button id="btnIncSave" class="btnMini" type="button">Registrar / Actualizar</button>
+        <button id="btnIncClear" class="btnMini btnDanger" type="button">Quitar incapacidad</button>
+      </div>
+
+      <div id="incMsg" class="small" style="margin-top:8px;"></div>
+    </div>
+
+    <hr/>
+
+    <div class="item">
       <b>4B) Carga masiva de citaciones (Excel/CSV)</b>
       <div class="small">Archivo con columnas: <code>${CITE_HEADERS.join(", ")}</code></div>
       <div class="actions" style="margin-top:8px;">
@@ -832,11 +865,57 @@ async function bootApp(){
     await trainerInit();
   }
 }
+async function adminInit(){
+  await adminRefreshAll();
+}
+
+async function adminRefreshAll(){
+  await adminLoadFormadores();
+  await adminLoadSessions();
+  await adminLoadSessionSelects();
+}
+
+/* Carga formadores al select de creación de sesión */
+async function adminLoadFormadores(){
+  const sb = getSB();
+  const sel = $("sessionFormador");
+  if(!sel) return;
+
+  sel.innerHTML = `<option value="">Cargando...</option>`;
+
+  const { data, error } = await sb
+    .from("profiles")
+    .select("user_id,nombre,rol,activo")
+    .eq("rol","formador")
+    .eq("activo", true)
+    .order("nombre", { ascending:true });
+
+  if(error){
+    sel.innerHTML = `<option value="">(error)</option>`;
+    setStatus(`<span class="err">Error cargando formadores:</span> ${esc(error.message)}`);
+    setLog(error);
+    return;
+  }
+
+  if(!data?.length){
+    sel.innerHTML = `<option value="">(No hay formadores)</option>`;
+    return;
+  }
+
+  sel.innerHTML =
+    `<option value="">Selecciona formador...</option>` +
+    data.map(f => `<option value="${esc(f.user_id)}">${esc(f.nombre || f.user_id)}</option>`).join("");
+}
 
 /* =========================================================
    ADMIN
 ========================================================= */
 function wireAdminHandlers(){
+
+  // ✅ INCAPACIDAD: enlazar botones SIEMPRE (NO dentro de otro onclick)
+  $("btnIncSave").onclick  = adminSaveIncapacity;
+  $("btnIncClear").onclick = adminClearIncapacity;
+
   $("btnEmpTemplateCSV").onclick = () => {
     const csv = EMP_HEADERS.join(",") + "\n";
     downloadTextFile(csv, "plantilla_empleados.csv", "text/csv;charset=utf-8");
@@ -899,50 +978,9 @@ function wireAdminHandlers(){
   $("btnSaveDates").onclick = adminSaveSessionDates;
   $("btnRefreshAdmin").onclick = adminRefreshAll;
   $("btnSearchEmp").onclick = adminSearchEmployees;
-  $("btnCiteUpload").onclick = adminUploadCitations; // ✅ CORRECCIÓN: SOLO SE ASIGNA, NO SE DEFINE AQUÍ
+  $("btnCiteUpload").onclick = adminUploadCitations;
 }
 
-async function adminInit(){
-  $("sessionFecha").value = todayISO();
-  await adminRefreshAll();
-}
-
-async function adminRefreshAll(){
-  await Promise.all([
-    adminLoadFormadores(),
-    adminLoadSessions(),
-    adminLoadSessionSelects()
-  ]);
-}
-
-async function adminLoadFormadores(){
-  const sb = getSB();
-  const sel = $("sessionFormador");
-  sel.innerHTML = `<option value="">Cargando formadores...</option>`;
-
-  const { data, error } = await sb
-    .from("profiles")
-    .select("user_id,nombre,rol,activo")
-    .eq("activo", true)
-    .order("nombre", { ascending:true });
-
-  if(error){
-    sel.innerHTML = `<option value="">(error)</option>`;
-    setStatus(`<span class="err">Error profiles:</span> ${esc(error.message)}`);
-    setLog(error);
-    return;
-  }
-
-  const formadores = (data || []).filter(p => (p.rol || "") === "formador");
-  if(!formadores.length){
-    sel.innerHTML = `<option value="">(No hay formadores en profiles)</option>`;
-    return;
-  }
-
-  sel.innerHTML = `<option value="">Selecciona formador...</option>` + formadores
-    .map(p => `<option value="${p.user_id}">${esc(p.nombre)} · ${p.user_id}</option>`)
-    .join("");
-}
 
 async function adminLoadSessions(){
   const sb = getSB();
@@ -1237,7 +1275,8 @@ window.adminDeleteSession = async (session_id) => {
   }
 };
 
-async function adminUploadEmployees(){
+  
+ async function adminUploadEmployees(){
   const sb = getSB();
   const file = $("empFile").files?.[0];
   const msg = $("empMsg");
@@ -1261,7 +1300,10 @@ async function adminUploadEmployees(){
 
     if(!rows.length) throw new Error("Archivo vacío.");
 
-    let headers = rows[0].map(h => val(h).toLowerCase()).map(h => h.replace(/\s+/g," ").trim());
+    let headers = rows[0]
+      .map(h => val(h).toLowerCase())
+      .map(h => h.replace(/\s+/g," ").trim());
+
     const missing = EMP_HEADERS.filter(h => !headers.includes(h));
     if(missing.length){
       throw new Error(`Faltan columnas requeridas: ${missing.join(", ")}\nEncabezados detectados: ${headers.join(", ")}`);
@@ -1273,48 +1315,43 @@ async function adminUploadEmployees(){
     const dataRows = rows.slice(1).filter(r => r.some(c => val(c) !== ""));
     if(!dataRows.length) throw new Error("No hay filas de datos.");
 
-   // 1) construir y NORMALIZAR
-const raw = dataRows.map(r => ({
-  documento: normDoc(r[idx.documento]),
-  nombre: val(r[idx.nombre]),
-  cargo: val(r[idx.cargo]),
-  area: val(r[idx.area]),
-  supervisor: val(r[idx.supervisor]),
-  email: normEmail(r[idx.email]),
-  estado: val(r[idx.estado]) || "activo"
-})).filter(x => x.documento && x.nombre);
+    // 1) construir y NORMALIZAR
+    const raw = dataRows.map(r => ({
+      documento: normDoc(r[idx.documento]),
+      nombre: val(r[idx.nombre]),
+      cargo: val(r[idx.cargo]),
+      area: val(r[idx.area]),
+      supervisor: val(r[idx.supervisor]),
+      email: normEmail(r[idx.email]),
+      estado: val(r[idx.estado]) || "activo"
+    })).filter(x => x.documento && x.nombre);
 
-if(!raw.length){
-  throw new Error("No hay registros válidos (requiere documento y nombre).");
-}
+    if(!raw.length) throw new Error("No hay registros válidos (requiere documento y nombre).");
 
-// 2) DEDUPLICAR por documento (si viene repetido en el Excel)
-//    (el último registro del archivo gana)
-const map = new Map();
-for(const e of raw){
-  map.set(e.documento, e);
-}
-const payload = [...map.values()];
+    // 2) DEDUPLICAR por documento (último gana)
+    const map = new Map();
+    for(const e of raw) map.set(e.documento, e);
+    const payload = [...map.values()];
 
-// aviso si había duplicados
-const duplicados = raw.length - payload.length;
-if(duplicados > 0){
-  msg.innerHTML = `<span class="warn">Aviso:</span> Se encontraron ${duplicados} documentos repetidos en el archivo. Se usó el último registro de cada uno.<br/>`;
-}
-
-
-    if(!payload.length) throw new Error("No hay registros válidos (requiere documento y nombre).");
+    const duplicados = raw.length - payload.length;
+    if(duplicados > 0){
+      msg.innerHTML = `<span class="warn">Aviso:</span> Se encontraron ${duplicados} documentos repetidos. Se usó el último registro de cada uno.<br/>`;
+    }
 
     setStatus(`Insertando/actualizando ${payload.length} empleados...`);
     setLog({ employees_preview: payload.slice(0, 8), total: payload.length });
 
-    let res = await sb.from("employees").upsert(payload, { onConflict: "documento" }).select("id,documento,nombre");
+    let res = await sb.from("employees")
+      .upsert(payload, { onConflict: "documento" })
+      .select("id,documento,nombre");
+
+    // fallback si tu tabla no tiene unique en documento
     if(res.error && String(res.error.message||"").toLowerCase().includes("on conflict")){
       res = await sb.from("employees").insert(payload).select("id,documento,nombre");
     }
     if(res.error) throw res.error;
 
-    msg.innerHTML = `<span class="ok">Empleados cargados.</span> (${res.data?.length ?? 0})`;
+    msg.innerHTML += `<span class="ok">Empleados cargados.</span> (${res.data?.length ?? 0})`;
     setStatus(`<span class="ok">Empleados cargados.</span>`);
     setLog({ employees_inserted_or_upserted: res.data });
 
@@ -1325,6 +1362,128 @@ if(duplicados > 0){
   }finally{
     $("btnEmpUpload").disabled = false;
     $("btnEmpUpload").textContent = "Subir e insertar";
+  }
+}
+   
+
+ 
+/* =========================================================
+   INCAPACIDADES (SUPER ADMIN)
+   - Guarda/actualiza por documento
+   - Borra por documento
+   Requiere tabla: incapacidades(documento, desde, hasta, obs, updated_at)
+   y/o un UNIQUE por documento (recomendado)
+========================================================= */
+
+async function adminSaveIncapacity(){
+  const sb = getSB();
+  const msg = $("incMsg");
+  msg.innerHTML = "";
+
+  const documento = normDoc($("incDoc").value);
+  const desde = val($("incDesde").value);
+  const hasta = val($("incHasta").value);
+  const obs = val($("incObs").value) || null;
+
+  if(!documento){
+    msg.innerHTML = `<span class="err">Debes ingresar el documento.</span>`;
+    return;
+  }
+  if(!desde || !hasta){
+    msg.innerHTML = `<span class="err">Debes seleccionar Desde y Hasta.</span>`;
+    return;
+  }
+  if(hasta < desde){
+    msg.innerHTML = `<span class="err">La fecha Hasta no puede ser menor que Desde.</span>`;
+    return;
+  }
+
+  $("btnIncSave").disabled = true;
+  $("btnIncSave").textContent = "Guardando...";
+  setStatus("Guardando incapacidad...");
+
+  try{
+    const payload = {
+      documento,
+      desde,
+      hasta,
+      obs,
+      updated_at: new Date().toISOString()
+    };
+
+    let r = await sb
+      .from("incapacidades")
+      .upsert(payload, { onConflict: "documento" })
+      .select("documento, desde, hasta, obs")
+      .single();
+
+    if(r.error && String(r.error.message||"").toLowerCase().includes("on conflict")){
+      r = await sb.from("incapacidades").insert(payload).select("documento, desde, hasta, obs").single();
+    }
+    if(r.error) throw r.error;
+
+    msg.innerHTML = `<span class="ok">Incapacidad registrada.</span> ${esc(documento)} (${esc(desde)} → ${esc(hasta)})`;
+    setStatus(`<span class="ok">Incapacidad guardada.</span>`);
+    setLog({ incapacidad_saved: r.data });
+
+    if(STATE?.profile?.rol !== "super_admin"){
+      await trainerLoadAbsenceAlerts();
+    }
+
+  }catch(e){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
+    setStatus(`<span class="err">No se pudo guardar incapacidad.</span>`);
+    setLog(e);
+  }finally{
+    $("btnIncSave").disabled = false;
+    $("btnIncSave").textContent = "Registrar / Actualizar";
+  }
+}
+
+async function adminClearIncapacity(){
+  const sb = getSB();
+  const msg = $("incMsg");
+  msg.innerHTML = "";
+
+  const documento = normDoc($("incDoc").value);
+  if(!documento){
+    msg.innerHTML = `<span class="err">Debes ingresar el documento.</span>`;
+    return;
+  }
+
+  if(!confirm(`¿Quitar incapacidad del documento ${documento}?`)) return;
+
+  $("btnIncClear").disabled = true;
+  $("btnIncClear").textContent = "Quitando...";
+  setStatus("Quitando incapacidad...");
+
+  try{
+    const { error } = await sb
+      .from("incapacidades")
+      .delete()
+      .eq("documento", documento);
+
+    if(error) throw error;
+
+    msg.innerHTML = `<span class="ok">Incapacidad eliminada.</span> ${esc(documento)}`;
+    setStatus(`<span class="ok">Incapacidad eliminada.</span>`);
+    setLog({ incapacidad_deleted: documento });
+
+    $("incDesde").value = "";
+    $("incHasta").value = "";
+    $("incObs").value = "";
+
+    if(STATE?.profile?.rol !== "super_admin"){
+      await trainerLoadAbsenceAlerts();
+    }
+
+  }catch(e){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
+    setStatus(`<span class="err">No se pudo quitar incapacidad.</span>`);
+    setLog(e);
+  }finally{
+    $("btnIncClear").disabled = false;
+    $("btnIncClear").textContent = "Quitar incapacidad";
   }
 }
 
@@ -1570,20 +1729,24 @@ async function trainerInit(){
   await trainerLoadAbsenceAlerts();   // ✅ alertas primero
   await trainerLoadSessions();        // ✅ luego sesiones
 }
-  async function trainerLoadAbsenceAlerts(){
+ async function trainerLoadAbsenceAlerts(){
   const sb = getSB();
   const cont = $("absenceAlertsTrainer");
   if(!cont) return;
 
+  const grid = "1fr 120px 1fr 120px 120px 70px 90px 120px";
+
   // header
   cont.innerHTML = `
-    <div class="tr th" style="grid-template-columns: 1fr 120px 1fr 120px 120px 70px;">
+    <div class="tr th" style="grid-template-columns:${grid};">
       <div>Empleado</div>
       <div>Documento</div>
       <div>Sesión</div>
       <div>Desde</div>
       <div>Hasta</div>
       <div>Días</div>
+      <div>Incap.</div>
+      <div>Regresa</div>
     </div>
   `;
 
@@ -1591,72 +1754,97 @@ async function trainerInit(){
     const { data: { user } } = await sb.auth.getUser();
     if(!user) throw new Error("No hay usuario autenticado.");
 
-    // 1) traer alertas
+    // 1) traer alertas (vista)
     const { data: rows, error } = await sb
-      .from("v_absence_alerts_3days")
-      .select("session_id,employee_id,documento,nombre,start_date,end_date,consecutive_absences")
+      .from("v_absence_alerts_3days_with_incapacity")
+      .select("session_id,employee_id,documento,nombre,start_date,end_date,consecutive_absences,tiene_incapacidad,incapacidad_hasta,regresa_el")
       .order("end_date", { ascending:false })
       .limit(200);
 
     if(error) throw error;
 
+    // ✅ si NO hay alertas en general
     if(!rows?.length){
       cont.innerHTML += `
-        <div class="tr" style="grid-template-columns: 1fr 120px 1fr 120px 120px 70px;">
-          <div class="ok">Sin alertas activas</div><div></div><div></div><div></div><div></div><div></div>
+        <div class="tr" style="grid-template-columns:${grid};">
+          <div class="ok">No hay alertas registradas</div>
+          <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
         </div>
       `;
       return;
     }
 
-    // 2) filtrar SOLO sesiones del formador actual
+    // 2) traer sesiones para filtrar solo las del formador actual
     const sessionIds = [...new Set(rows.map(r => r.session_id).filter(Boolean))];
-    if(!sessionIds.length) return;
+    if(!sessionIds.length){
+      cont.innerHTML += `
+        <div class="tr" style="grid-template-columns:${grid};">
+          <div class="warn">No se encontraron session_id en las alertas.</div>
+          <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+        </div>
+      `;
+      return;
+    }
 
-   const { data: sess, error: e2 } = await sb
-  .from("sessions")
-  .select("id, formador_user_id, trainings ( nombre )")
-  .in("id", sessionIds);
+    const { data: sess, error: e2 } = await sb
+      .from("sessions")
+      .select("id, formador_user_id, trainings ( nombre )")
+      .in("id", sessionIds);
+
     if(e2) throw e2;
+
     const mine = new Set((sess || [])
       .filter(s => s.formador_user_id === user.id)
       .map(s => s.id)
     );
 
-    const sessionNameMap = new Map((sess || []).map(s => [s.id, (s.trainings?.nombre || "Sesión")]))
+    const sessionNameMap = new Map((sess || []).map(s => [s.id, (s.trainings?.nombre || "Sesión")]));
 
+    // ✅ filtrar SOLO sesiones del formador actual
     const filtered = rows.filter(r => mine.has(r.session_id));
 
     if(!filtered.length){
       cont.innerHTML += `
-        <div class="tr" style="grid-template-columns: 1fr 120px 1fr 120px 120px 70px;">
-          <div class="ok">Sin alertas activas en tus sesiones</div><div></div><div></div><div></div><div></div><div></div>
+        <div class="tr" style="grid-template-columns:${grid};">
+          <div class="ok">Sin alertas activas en tus sesiones</div>
+          <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
         </div>
       `;
       return;
     }
 
+    // 3) pintar filas (8 columnas)
     for(const r of filtered){
+      const inc = (r.tiene_incapacidad === true);
+      const regresa = r.regresa_el || r.incapacidad_hasta || "";
+
       cont.innerHTML += `
-        <div class="tr" style="grid-template-columns: 1fr 120px 1fr 120px 120px 70px;">
+        <div class="tr" style="grid-template-columns:${grid};">
           <div>${esc(r.nombre || "")}</div>
           <div>${esc(r.documento || "")}</div>
-          <div class="small">${esc(sessionNameMap.get(r.session_id) || "Sesión")}<br/><code>${esc(r.session_id)}</code></div>
+          <div class="small">
+            ${esc(sessionNameMap.get(r.session_id) || "Sesión")}
+            <br/><code>${esc(r.session_id)}</code>
+          </div>
           <div>${esc(r.start_date || "")}</div>
           <div>${esc(r.end_date || "")}</div>
           <div class="warn"><b>${esc(r.consecutive_absences ?? "")}</b></div>
+          <div class="${inc ? "ok" : "small"}">${inc ? "SI" : "NO"}</div>
+          <div class="${inc ? "ok" : "small"}">${inc ? esc(regresa) : "—"}</div>
         </div>
       `;
     }
 
   }catch(e){
     cont.innerHTML += `
-      <div class="tr" style="grid-template-columns: 1fr 120px 1fr 120px 120px 70px;">
-        <div class="err">${esc(e.message || e)}</div><div></div><div></div><div></div><div></div><div></div>
+      <div class="tr" style="grid-template-columns:${grid};">
+        <div class="err">${esc(e.message || e)}</div>
+        <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
       </div>
     `;
   }
 }
+
 
 
 async function trainerLoadSessions(){
@@ -2189,6 +2377,7 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
 
 
 
