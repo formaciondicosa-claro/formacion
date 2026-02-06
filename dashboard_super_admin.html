@@ -182,14 +182,6 @@ code{color:#fff;}
 
 <body>
 <div class="app">
-
-/* Evitar que textos largos rompan el grid */
-#histTable .tr > div{
-  min-width: 0;
-  overflow-wrap: break-word;
-  word-break: break-word;
-}
-
   
   <!-- LOGIN -->
   <div id="login" class="card" style="max-width:480px;margin:40px auto;">
@@ -1007,6 +999,7 @@ function renderDetailForSelectedDate(){
     </div>
   `;
 }
+  }
 
 /* =======================
    HISTORIAL COLABORADOR
@@ -1261,6 +1254,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
