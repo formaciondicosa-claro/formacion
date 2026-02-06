@@ -317,7 +317,7 @@ code{color:#fff;}
 
         <div class="tablelike" style="margin-top:10px;" id="detailTable">
           <div class="tr th">
-            <div>Empleado</div><div>Documento</div><div>Estado</div><div>Asistió</div><div>Obs.</div>
+            <div>Empleado</div><div>Documento</div><div>Asistió</div><div>Obs.</div>
           </div>
         </div>
 
@@ -911,7 +911,7 @@ function renderDetailEmpty(){
   const dt = $("detailTable");
   dt.innerHTML = `
     <div class="tr th">
-      <div>Empleado</div><div>Documento</div><div>Estado</div><div>Asistió</div><div>Obs.</div>
+      <div>Empleado</div><div>Documento</div><div>Asistió</div><div>Obs.</div>
     </div>
     <div class="tr">
       <div class="small"><span class="warn">Selecciona una fecha arriba para ver el detalle.</span></div>
@@ -938,7 +938,7 @@ function renderDetailForSelectedDate(){
   const dt = $("detailTable");
   dt.innerHTML = `
     <div class="tr th">
-      <div>Empleado</div><div>Documento</div><div>Estado</div><div>Asistió</div><div>Obs.</div>
+      <div>Empleado</div><div>Documento</div><div>Asistió</div><div>Obs.</div>
     </div>
   `;
 
@@ -988,7 +988,7 @@ async function buscarHistorialColaborador(){
   $("histMsg").innerHTML = "";
   $("histTable").innerHTML = `
     <div class="tr th">
-      <div>Sesión / Entrenamiento</div><div>Fecha</div><div>Asistió</div><div>Estado</div><div>Ciudad</div><div>Formador</div><div>Tema visto</div>
+      <div>Sesión / Entrenamiento</div><div>Fecha</div><div>Asistió</div><div>Ciudad</div><div>Formador</div><div>Tema visto</div>
     </div>
   `;
 
@@ -1133,7 +1133,7 @@ function limpiarHistorialColaborador(){
   $("histMsg").innerHTML = "";
   $("histTable").innerHTML = `
     <div class="tr th">
-      <div>Sesión / Entrenamiento</div><div>Fecha</div><div>Asistió</div><div>Estado</div><div>Ciudad</div><div>Formador</div><div>Tema visto</div>
+      <div>Sesión / Entrenamiento</div><div>Fecha</div><div>Asistió</div><div>Ciudad</div><div>Formador</div><div>Tema visto</div>
     </div>
   `;
 }
@@ -1231,6 +1231,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
