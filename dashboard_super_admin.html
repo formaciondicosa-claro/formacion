@@ -1055,18 +1055,44 @@ async function buscarHistorialColaborador(){
       trainerMap = new Map((trs || []).map(t => [t.user_id, t.nombre || ""]));
     }
 
-    // ✅ Map temas (session_dates) por session_id + fecha
-    const sessionIds = [...new Set(rows.map(r => r.session_id).filter(Boolean))];
-    let temaMap = new Map(); // key: `${session_id}|${fecha}` -> tema
-    if(sessionIds.length){
-      const { data: temas, error: eS } = await sb
-        .from("session_dates")
-        .select("session_id,fecha,tema_visto")
-        .in("session_id", sessionIds);
-      if(eS) throw eS;
+    // ✅ Map temas desde attendance_dates.tema (modo por session_id + fecha)
+const sessionIds = [...new Set(rows.map(r => r.session_id).filter(Boolean))];
+const fechas = [...new Set(rows.map(r => r.session_date).filter(Boolean))];
 
-      temaMap = new Map((temas || []).map(t => [`${t.session_id}|${t.fecha}`, t.tema_visto || ""]));
+let temaMap = new Map(); // key: `${session_id}|${fecha}` -> tema (más repetido)
+
+if(sessionIds.length && fechas.length){
+  const { data: trows, error: eS } = await sb
+    .from("attendance_dates")
+    .select("session_id, session_date, tema")
+    .in("session_id", sessionIds)
+    .in("session_date", fechas)
+    .not("tema", "is", null);
+
+  if(eS) throw eS;
+
+  // contador por (session_id|fecha) -> Map(tema -> count)
+  const counter = new Map();
+
+  for(const r of (trows || [])){
+    const key = `${r.session_id}|${r.session_date}`;
+    const tema = (r.tema ?? "").toString().trim();
+    if(!tema) continue;
+
+    if(!counter.has(key)) counter.set(key, new Map());
+    const m = counter.get(key);
+    m.set(tema, (m.get(tema) || 0) + 1);
+  }
+
+  for(const [key, m] of counter.entries()){
+    let best = "";
+    let bestC = -1;
+    for(const [t, c] of m.entries()){
+      if(c > bestC){ bestC = c; best = t; }
     }
+    if(best) temaMap.set(key, best);
+  }
+}
 
     for(const r of rows){
       const trainingName = r.sessions?.trainings?.nombre || "(sin entrenamiento)";
@@ -1205,6 +1231,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
