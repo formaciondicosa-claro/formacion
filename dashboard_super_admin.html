@@ -989,25 +989,23 @@ function renderDetailForSelectedDate(){
   });
 
   for(const c of sorted){
-    const emp = c.employees || {};
-    const rec = map.get(c.employee_id) || null;
-    const asistio = rec ? rec.asistio : null;
-    const estado = rec ? (rec.estado || "") : "";
+  const emp = c.employees || {};
+  const rec = map.get(c.employee_id) || null;
 
-    const asistioTxt = (asistio === true) ? "Sí" : (asistio === false) ? "No" : "—";
-    const estadoTxt = estado || "—";
-    const obs = (estado === "tarde") ? "Tarde" : "";
+  const asistio = rec ? rec.asistio : null;
+  const estado  = rec ? (rec.estado || "") : ""; // "tarde" si aplica
 
-    dt.innerHTML += `
-      <div class="tr">
-        <div>${esc(emp.nombre || "")}</div>
-        <div>${esc(emp.documento || "")}</div>
-        <div>${esc(estadoTxt)}</div>
-        <div class="${asistio === true ? "ok" : asistio === false ? "warn" : ""}">${esc(asistioTxt)}</div>
-<div class="small">${esc(obs)}</div>
-      </div>
-    `;
-  }
+  const asistioTxt = (asistio === true) ? "Sí" : (asistio === false) ? "No" : "—";
+  const obsTxt = (estado === "tarde") ? "Tarde" : "";
+
+  dt.innerHTML += `
+    <div class="tr">
+      <div>${esc(emp.nombre || "")}</div>
+      <div>${esc(emp.documento || "")}</div>
+      <div class="${asistio === true ? "ok" : asistio === false ? "warn" : ""}">${esc(asistioTxt)}</div>
+      <div class="small">${esc(obsTxt)}</div>
+    </div>
+  `;
 }
 
 /* =======================
@@ -1263,6 +1261,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
