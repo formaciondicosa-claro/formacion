@@ -283,6 +283,7 @@ const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_j84bjNzsEw1O-zsvliQ4Wg_BhGkSqR_
 
 const EMP_HEADERS = ["documento","nombre","cargo","area","supervisor","email","estado"];
 const CITE_HEADERS = ["session_id","documento"]; // para carga masiva
+const CERT_HEADERS = ["documento","certificacion","fecha_teorica","fecha_practica"];
 
 /* =========================================================
    HELPERS
@@ -608,7 +609,28 @@ function renderAdminLeft(){
       <div id="empMsg" class="small" style="margin-top:8px;"></div>
     </div>
 
-    <hr/>
+   <hr/>
+
+<div class="item">
+  <b>6) Cargar certificaciones (Excel/CSV)</b>
+  <div class="small">
+    Archivo con columnas: <code>documento, certificacion, fecha_teorica, fecha_practica</code>
+  </div>
+
+  <div class="actions" style="margin-top:8px;">
+    <button id="btnCertTemplateCSV" class="btnMini btnGhost" type="button">Plantilla CSV</button>
+    <button id="btnCertTemplateXLSX" class="btnMini btnGhost" type="button">Plantilla XLSX</button>
+  </div>
+
+  <div class="row" style="margin-top:10px;">
+    <input id="certFile" type="file"
+      accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" />
+    <button id="btnCertUpload" class="btnMini" type="button">Cargar certificaciones</button>
+  </div>
+
+  <div id="certMsg" class="small" style="margin-top:8px;"></div>
+</div>
+
 
     <div class="item">
       <b>2) Crear entrenamiento</b>
@@ -979,6 +1001,36 @@ function wireAdminHandlers(){
   $("btnRefreshAdmin").onclick = adminRefreshAll;
   $("btnSearchEmp").onclick = adminSearchEmployees;
   $("btnCiteUpload").onclick = adminUploadCitations;
+  $("btnCertTemplateCSV").onclick = () => {
+    const csv = CERT_HEADERS.join(",") + "\n";
+    downloadTextFile(csv, "plantilla_certificaciones.csv", "text/csv;charset=utf-8");
+    setStatus(`<span class="ok">Plantilla certificaciones CSV descargada.</span>`);
+    setLog(csv);
+  };
+
+  $("btnCertTemplateXLSX").onclick = () => {
+    try{
+      if(!window.XLSX) throw new Error("XLSX bloqueado. Usa CSV.");
+      const ws = XLSX.utils.aoa_to_sheet([CERT_HEADERS]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "certificaciones");
+      const out = XLSX.write(wb, { bookType:"xlsx", type:"array" });
+      const blob = new Blob([out], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "plantilla_certificaciones.xlsx";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 600);
+      setStatus(`<span class="ok">Plantilla certificaciones XLSX descargada.</span>`);
+      setLog({ headers: CERT_HEADERS });
+    }catch(e){
+      setStatus(`<span class="err">Error:</span> ${esc(e.message || e)}`);
+      setLog(e);
+    }
+  };
+
+  $("btnCertUpload").onclick = adminUploadCertifications;
+
 }
 
 
@@ -1596,6 +1648,8 @@ async function adminUploadCitations(){
       rows = parseDelimited(text);
     }
     if(!rows.length) throw new Error("Archivo vacío.");
+    
+
 
     // encabezados
     let headers = rows[0].map(h => val(h).toLowerCase()).map(h => h.replace(/\s+/g," ").trim());
@@ -1704,6 +1758,106 @@ async function adminUploadCitations(){
   }finally{
     $("btnCiteUpload").disabled = false;
     $("btnCiteUpload").textContent = "Cargar citaciones";
+  }
+}
+async function adminUploadCertifications(){
+  const sb = getSB();
+  const file = $("certFile")?.files?.[0];
+  const msg = $("certMsg");
+  msg.innerHTML = "";
+
+  if(!file){ alert("Selecciona un CSV o XLSX."); return; }
+
+  $("btnCertUpload").disabled = true;
+  $("btnCertUpload").textContent = "Procesando...";
+  setStatus("Leyendo certificaciones...");
+
+  try{
+    let rows = [];
+    if(file.name.toLowerCase().endsWith(".xlsx")){
+      const buf = await file.arrayBuffer();
+      rows = parseXLSX(buf);
+    }else{
+      const text = await file.text();
+      rows = parseDelimited(text);
+    }
+
+    if(!rows.length) throw new Error("Archivo vacío.");
+
+    let headers = rows[0]
+      .map(h => val(h).toLowerCase())
+      .map(h => h.replace(/\s+/g," ").trim());
+
+    const missing = CERT_HEADERS.filter(h => !headers.includes(h));
+    if(missing.length){
+      throw new Error("Faltan columnas: " + missing.join(", "));
+    }
+
+    const idx = {};
+    headers.forEach((h,i)=> idx[h]=i);
+
+    const dataRows = rows.slice(1).filter(r => r.some(c => val(c) !== ""));
+    if(!dataRows.length) throw new Error("No hay datos.");
+
+    const raw = dataRows.map(r => ({
+      documento: normDoc(r[idx.documento]),
+      certificacion: val(r[idx.certificacion]),
+      fecha_teorica: val(r[idx.fecha_teorica]) || null,
+      fecha_practica: val(r[idx.fecha_practica]) || null,
+    })).filter(x => x.documento && x.certificacion);
+
+    if(!raw.length) throw new Error("No hay filas válidas.");
+
+    const docs = [...new Set(raw.map(x => x.documento))];
+    const map = new Map();
+
+    const { data, error } = await sb
+      .from("employees")
+      .select("id,documento")
+      .in("documento", docs);
+
+    if(error) throw error;
+
+    (data||[]).forEach(e => map.set(String(e.documento), e.id));
+
+    const payload = [];
+    const noFound = [];
+
+    for(const r of raw){
+      const id = map.get(String(r.documento));
+      if(!id){ noFound.push(r.documento); continue; }
+
+      payload.push({
+        employee_id: id,
+        certificacion: r.certificacion,
+        fecha_teorica: r.fecha_teorica,
+        fecha_practica: r.fecha_practica
+      });
+    }
+
+    if(!payload.length) throw new Error("Ningún documento encontrado en employees.");
+
+    const { error: e2 } = await sb
+      .from("employee_certifications")
+      .upsert(payload,{ onConflict:"employee_id,certificacion" });
+
+    if(e2) throw e2;
+
+    msg.innerHTML = `<span class="ok">Listo.</span> ${payload.length} cargadas.`;
+    if(noFound.length){
+      msg.innerHTML += `<br/><span class="warn">No encontrados en employees:</span> ${noFound.length}`;
+    }
+
+    setStatus(`<span class="ok">Certificaciones cargadas.</span>`);
+    setLog({ cert_upload: { ok: payload.length, noFound: noFound.length } });
+
+  }catch(e){
+    msg.innerHTML = `<span class="err">Error:</span> ${esc(e.message||e)}`;
+    setStatus(`<span class="err">Error en carga.</span>`);
+    setLog(e);
+  }finally{
+    $("btnCertUpload").disabled = false;
+    $("btnCertUpload").textContent = "Cargar certificaciones";
   }
 }
 
@@ -2377,6 +2531,7 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
 
 
 
