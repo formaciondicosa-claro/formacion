@@ -1845,8 +1845,15 @@ async function adminUploadCertifications(){
 
     msg.innerHTML = `<span class="ok">Listo.</span> ${payload.length} cargadas.`;
     if(noFound.length){
-      msg.innerHTML += `<br/><span class="warn">No encontrados en employees:</span> ${noFound.length}`;
-    }
+  const uniq = [...new Set(noFound)];
+  msg.innerHTML += `<br/><span class="warn">No encontrados en employees:</span> ${uniq.length}`;
+  msg.innerHTML += `<br/><span class="small">Documentos:</span> <code>${uniq.join(", ")}</code>`;
+
+  // ✅ además genera un CSV para descargar con los no encontrados
+  const csv = "documento\n" + uniq.join("\n");
+  downloadTextFile(csv, "no_encontrados_employees.csv", "text/csv;charset=utf-8");
+}
+
 
     setStatus(`<span class="ok">Certificaciones cargadas.</span>`);
     setLog({ cert_upload: { ok: payload.length, noFound: noFound.length } });
@@ -2531,6 +2538,7 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
 
 
 
