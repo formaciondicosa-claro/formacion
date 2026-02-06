@@ -326,6 +326,52 @@ function addDaysISO(isoDate, days){
   const dd = String(d.getDate()).padStart(2,"0");
   return `${yyyy}-${mm}-${dd}`;
 }
+  function parseDateToISO(v){
+  // Devuelve "YYYY-MM-DD" o null
+  if(v === null || v === undefined) return null;
+
+  // Si viene como número (Excel serial) o string numérica
+  const s0 = String(v).trim();
+  if(!s0) return null;
+
+  // 1) Si ya viene ISO yyyy-mm-dd
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s0)) return s0;
+
+  // 2) Si viene dd/mm/yyyy o dd-mm-yyyy
+  const m = s0.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if(m){
+    const dd = String(m[1]).padStart(2,"0");
+    const mm = String(m[2]).padStart(2,"0");
+    const yyyy = m[3];
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // 3) Excel serial (días desde 1899-12-30)
+  // Nota: muchos xlsx lo traen como número o como string numérica
+  if(/^\d+(\.\d+)?$/.test(s0)){
+    const n = Number(s0);
+    if(isFinite(n) && n > 0){
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      excelEpoch.setUTCDate(excelEpoch.getUTCDate() + Math.floor(n));
+      const yyyy = excelEpoch.getUTCFullYear();
+      const mm = String(excelEpoch.getUTCMonth()+1).padStart(2,"0");
+      const dd = String(excelEpoch.getUTCDate()).padStart(2,"0");
+      return `${yyyy}-${mm}-${dd}`;
+    }
+  }
+
+  // 4) Último intento: Date()
+  const d = new Date(s0);
+  if(!isNaN(d.getTime())){
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth()+1).padStart(2,"0");
+    const dd = String(d.getDate()).padStart(2,"0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return null;
+}
+
 function downloadTextFile(content, filename, mime){
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -1800,11 +1846,15 @@ async function adminUploadCertifications(){
     if(!dataRows.length) throw new Error("No hay datos.");
 
     const raw = dataRows.map(r => ({
-      documento: normDoc(r[idx.documento]),
-      certificacion: val(r[idx.certificacion]),
-      fecha_teorica: val(r[idx.fecha_teorica]) || null,
-      fecha_practica: val(r[idx.fecha_practica]) || null,
-    })).filter(x => x.documento && x.certificacion);
+  documento: normDoc(r[idx.documento]),
+  certificacion: val(r[idx.certificacion]),
+
+  // ✅ Convertir fechas a formato ISO
+  fecha_teorica: parseDateToISO(r[idx.fecha_teorica]),
+  fecha_practica: parseDateToISO(r[idx.fecha_practica]),
+
+})).filter(x => x.documento && x.certificacion);
+
 
     if(!raw.length) throw new Error("No hay filas válidas.");
 
@@ -2541,6 +2591,7 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
 
 
 
