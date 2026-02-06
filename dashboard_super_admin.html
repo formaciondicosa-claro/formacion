@@ -143,10 +143,24 @@ code{color:#fff;}
   grid-template-columns: 1fr 120px 1fr 120px 120px 70px;
 }
 
-/* ✅ Tabla resumen por fecha: 6 columnas (incluye tema) */
+/* ✅ RESUMEN POR FECHA: 6 columnas fijas */
 #summaryByDate .tr{
-  grid-template-columns: 160px 120px 120px 120px 90px 1fr;
+  display:grid !important;
+  grid-template-columns: 160px 120px 120px 140px 90px minmax(260px, 2fr) !important;
+  gap:10px;
+  align-items:start;
 }
+#summaryByDate .tr > div{ min-width:0; word-break:break-word; overflow-wrap:break-word; }
+
+/* ✅ DETALLE POR EMPLEADO: 5 columnas fijas */
+#detailTable .tr{
+  display:grid !important;
+  grid-template-columns: 1fr 140px 120px 110px 1fr !important;
+  gap:10px;
+  align-items:center;
+}
+#detailTable .tr > div{ min-width:0; word-break:break-word; overflow-wrap:break-word; }
+
 /* ✅ HISTORIAL: columnas fijas y estables */
 #histTable .tr{
   display: grid !important;
@@ -1249,6 +1263,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
