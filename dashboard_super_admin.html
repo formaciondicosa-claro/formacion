@@ -1125,17 +1125,16 @@ if(sessionIds.length && fechas.length){
       const keyTema = `${r.session_id}|${r.session_date}`;
       const tema = temaMap.get(keyTema) || "";
 
-      $("histTable").innerHTML += `
-        <div class="tr">
-          <div><b>${esc(trainingName)}</b></div>
-          <div>${esc(r.session_date || "")}</div>
-          <div class="${r.asistio === true ? "ok" : r.asistio === false ? "warn" : ""}">${esc(asistTxt)}</div>
-          <div>${esc(estadoTxt)}</div>
-          <div>${esc(city)}</div>
-          <div class="small">${esc(formadorNombre || "—")}</div>
-          <div class="small">${esc(tema || "—")}</div>
-        </div>
-      `;
+     $("histTable").innerHTML += `
+  <div class="tr">
+    <div><b>${esc(trainingName)}</b></div>
+    <div>${esc(r.session_date || "")}</div>
+    <div class="${r.asistio === true ? "ok" : r.asistio === false ? "warn" : ""}">${esc(asistTxt)}</div>
+    <div>${esc(city || "")}</div>
+    <div class="small">${esc(formadorNombre || "")}</div>
+    <div class="small histTema" title="${esc(tema || "")}">${esc(tema || "")}</div>
+  </div>
+`;
     }
 
     $("histMsg").innerHTML = `<span class="ok">Historial cargado:</span> ${rows.length} registros.`;
@@ -1250,6 +1249,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
