@@ -152,14 +152,14 @@ code{color:#fff;}
 }
 #summaryByDate .tr > div{ min-width:0; word-break:break-word; overflow-wrap:break-word; }
 
-/* ✅ DETALLE POR EMPLEADO: 5 columnas fijas */
+/* ✅ DETALLE POR EMPLEADO: 4 columnas */
 #detailTable .tr{
   display:grid !important;
-  grid-template-columns: 1fr 140px 120px 110px 1fr !important;
+  grid-template-columns: 1fr 160px 120px 1fr !important;
   gap:10px;
   align-items:center;
 }
-#detailTable .tr > div{ min-width:0; word-break:break-word; overflow-wrap:break-word; }
+#detailTable .tr > div{ min-width:0; overflow-wrap:break-word; word-break:break-word; }
 
 /* ✅ HISTORIAL: columnas fijas y estables */
 #histTable .tr{
@@ -349,10 +349,10 @@ code{color:#fff;}
         <div class="small">Muestra empleados citados y su estado en esa fecha.</div>
 
         <div class="tablelike" style="margin-top:10px;" id="detailTable">
-          <div class="tr th">
-            <div>Empleado</div><div>Documento</div><div>Asistió</div><div>Obs.</div>
-          </div>
-        </div>
+  <div class="tr th">
+    <div>Empleado</div><div>Documento</div><div>Asistió</div><div>Obs.</div>
+  </div>
+</div>
 
         <div class="small" style="margin-top:10px;" id="rightMsg"></div>
 
@@ -948,7 +948,7 @@ function renderDetailEmpty(){
     </div>
     <div class="tr">
       <div class="small"><span class="warn">Selecciona una fecha arriba para ver el detalle.</span></div>
-      <div></div><div></div><div></div><div></div>
+      <div></div><div></div><div></div>
     </div>
   `;
 }
@@ -1004,7 +1004,7 @@ function renderDetailForSelectedDate(){
         <div>${esc(emp.documento || "")}</div>
         <div>${esc(estadoTxt)}</div>
         <div class="${asistio === true ? "ok" : asistio === false ? "warn" : ""}">${esc(asistioTxt)}</div>
-        <div class="small">${esc(obs)}</div>
+<div class="small">${esc(obs)}</div>
       </div>
     `;
   }
@@ -1263,6 +1263,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
