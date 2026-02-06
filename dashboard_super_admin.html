@@ -147,18 +147,22 @@ code{color:#fff;}
 #summaryByDate .tr{
   grid-template-columns: 160px 120px 120px 120px 90px 1fr;
 }
-
+/* ✅ HISTORIAL: columnas fijas y estables */
 #histTable .tr{
-  display:grid !important;
+  display: grid !important;
   grid-template-columns:
-    minmax(260px, 1.6fr)
-    110px
-    90px
-    140px
-    160px
-    minmax(260px, 2fr) !important;
-  gap:10px;
+    minmax(320px, 2fr)   /* Sesión */
+    110px               /* Fecha */
+    90px                /* Asistió */
+    150px               /* Ciudad */
+    170px               /* Formador */
+    minmax(300px, 2.2fr) /* Tema */
+  !important;
+
+  gap: 12px;
+  align-items: start;
 }
+
 </style>
 </head>
 
@@ -1238,6 +1242,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
