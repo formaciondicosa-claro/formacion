@@ -1843,25 +1843,22 @@ async function adminUploadCertifications(){
 
     if(e2) throw e2;
 
-    msg.innerHTML = `<span class="ok">Listo.</span> ${payload.length} cargadas.`;
-    if(noFound.length){
+ msg.innerHTML = `<span class="ok">Listo.</span> ${payload.length} cargadas.`;
+
+if(noFound.length){
   const uniq = [...new Set(noFound)];
 
-  // ✅ SOLO mostrar un resumen (máximo 20)
-  const preview = uniq.slice(0, 20);
-
   msg.innerHTML += `<br/><span class="warn">No encontrados en employees:</span> ${uniq.length}`;
-  msg.innerHTML += `<br/><span class="small">Ejemplo (primeros ${preview.length}):</span> <code>${preview.join(", ")}</code>`;
-  if(uniq.length > preview.length){
-    msg.innerHTML += `<br/><span class="small">Se descargó el archivo completo con todos los no encontrados.</span>`;
-  }
 
-  // ✅ Descargar CSV completo (esto es liviano)
+  // descarga automática (completo)
   const csv = "documento\n" + uniq.join("\n");
-  downloadTextFile(csv, "no_encontrados_employees.csv", "text/csv;charset=utf-8");
+  downloadTextFile(
+    csv,
+    "no_encontrados_employees_certificaciones.csv",
+    "text/csv;charset=utf-8"
+  );
 }
 
-    setStatus(`<span class="ok">Certificaciones cargadas.</span>`);
     setLog({ cert_upload: { ok: payload.length, noFound: noFound.length } });
 
   }catch(e){
@@ -2544,6 +2541,7 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
 
 
 
