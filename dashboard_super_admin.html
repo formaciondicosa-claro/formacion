@@ -148,18 +148,16 @@ code{color:#fff;}
   grid-template-columns: 160px 120px 120px 120px 90px 1fr;
 }
 
-/* ✅ Tabla historial: 7 columnas (incluye formador y tema) */
 #histTable .tr{
-  #histTable .tr{
-  display: grid;
+  display:grid !important;
   grid-template-columns:
-    minmax(220px, 1.6fr) /* Sesión */
-    110px               /* Fecha */
-    90px                /* Asistió */
-    130px               /* Ciudad */
-    150px               /* Formador */
-    2fr;                /* Tema */
-  gap: 10px;
+    minmax(260px, 1.6fr)
+    110px
+    90px
+    140px
+    160px
+    minmax(260px, 2fr) !important;
+  gap:10px;
 }
 </style>
 </head>
@@ -1240,6 +1238,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
