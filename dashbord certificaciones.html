@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dashboard Certificaciones – Formación DICO</title>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+  <style>
+    :root{
+      --violeta:#a78bfa; --violeta-osc:#7c3aed;
+      --bg:#050617; --bg2:#111827; --card:#17182b;
+      --text:#e8e6ff; --muted:#bfbde6; --border-soft:rgba(167,139,250,.25);
+      --danger:#f97373; --success:#34d399; --warn:#facc15; --info:#38bdf8;
+    }
+    *{box-sizing:border-box;font-family:system-ui,Segoe UI,Roboto,sans-serif;}
+    body{margin:0;min-height:100vh;background:radial-gradient(circle at top,var(--bg2),var(--bg));color:var(--text);padding:18px;}
+    h1{margin:0 0 6px 0;}
+    .sub{color:var(--muted);margin:0 0 16px 0;font-size:13px;}
+    .wrap{max-width:1250px;margin:0 auto;}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;}
+    .card{background:rgba(23,24,43,.85);border:1px solid var(--border-soft);border-radius:16px;box-shadow:0 18px 40px rgba(0,0,0,.45);padding:14px;}
+    .kpi{flex:1;min-width:220px;}
+    .kpi .label{color:var(--muted);font-size:12px;}
+    .kpi .val{font-size:28px;font-weight:900;margin-top:6px;}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid var(--border-soft);color:var(--muted);font-size:12px;}
+    input,select,button{border-radius:12px;border:1px solid rgba(167,139,250,.35);background:#0b0c1a;color:var(--text);padding:10px 12px;font-size:13px;}
+    button{cursor:pointer;background:linear-gradient(135deg,var(--violeta-osc),var(--violeta));border:0;font-weight:900;}
+    button.sec{background:transparent;border:1px solid rgba(167,139,250,.35);}
+    .table{margin-top:12px;border-radius:14px;overflow:auto;border:1px solid rgba(167,139,250,.25);background:#050617;}
+    table{width:100%;border-collapse:collapse;font-size:12px;}
+    thead{position:sticky;top:0;background:#101226;}
+    th,td{padding:10px 10px;border-bottom:1px solid rgba(167,139,250,.14);text-align:left;white-space:nowrap;}
+    tbody tr:nth-child(even){background:#101226;}
+    .tag{padding:4px 10px;border-radius:999px;font-weight:900;font-size:11px;display:inline-block;}
+    .t-vig{background:rgba(52,211,153,.15);border:1px solid rgba(52,211,153,.35);color:#a7f3d0;}
+    .t-30{background:rgba(250,204,21,.12);border:1px solid rgba(250,204,21,.35);color:#fde68a;}
+    .t-ven{background:rgba(249,115,115,.12);border:1px solid rgba(249,115,115,.35);color:#fecaca;}
+    .t-sin{background:rgba(56,189,248,.10);border:1px solid rgba(56,189,248,.30);color:#bae6fd;}
+    .small{color:var(--muted);font-size:12px;}
+    .right{margin-left:auto;}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row" style="justify-content:space-between;">
+    <div>
+      <h1>Dashboard Certificaciones</h1>
+      <p class="sub">Vigentes · Por vencer (≤ 30 días) · Vencidos</p>
+    </div>
+    <div class="row">
+      <span class="pill" id="who">—</span>
+      <button class="sec" id="btnLogout">Salir</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="card kpi">
+      <div class="label">✅ Vigentes</div>
+      <div class="val" id="kpiVig">—</div>
+    </div>
+    <div class="card kpi">
+      <div class="label">⚠️ Por vencer (≤30)</div>
+      <div class="val" id="kpi30">—</div>
+    </div>
+    <div class="card kpi">
+      <div class="label">❌ Vencidos</div>
+      <div class="val" id="kpiVen">—</div>
+    </div>
+    <div class="card kpi">
+      <div class="label">📦 Total registros</div>
+      <div class="val" id="kpiTot">—</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px;">
+    <div class="row">
+      <div>
+        <div class="small">Filtro estado</div>
+        <select id="fEstado">
+          <option value="">Todos</option>
+          <option value="vigente">Vigente</option>
+          <option value="por_vencer_30">Por vencer ≤30</option>
+          <option value="vencido">Vencido</option>
+          <option value="sin_fecha">Sin fecha</option>
+        </select>
+      </div>
+
+      <div>
+        <div class="small">Buscar (documento / nombre / certificación)</div>
+        <input id="q" placeholder="Ej: 1070 o Nemocon o Bidireccional" style="min-width:320px;" />
+      </div>
+
+      <div>
+        <div class="small">Solo próximos a vencer</div>
+        <select id="fDias">
+          <option value="">Sin filtro</option>
+          <option value="30">≤ 30 días</option>
+          <option value="60">≤ 60 días</option>
+          <option value="90">≤ 90 días</option>
+        </select>
+      </div>
+
+      <button id="btnRef" class="right">Actualizar</button>
+      <button id="btnCSV" class="sec">Exportar CSV</button>
+    </div>
+
+    <div class="small" id="status" style="margin-top:10px;">Listo.</div>
+
+    <div class="table">
+      <table>
+        <thead>
+          <tr>
+            <th>Documento</th>
+            <th>Nombre</th>
+            <th>Cargo</th>
+            <th>Certificación</th>
+            <th>Teórica</th>
+            <th>Vence</th>
+            <th>Días</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody id="tb"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ✅ Usa tus datos
+  const SUPABASE_URL = "https://bqlltjronzrlgbjjntes.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_j84bjNzsEw1O-zsvliQ4Wg_BhGkSqR_";
+
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
+  });
+
+  const $ = (id)=>document.getElementById(id);
+  const tb = $("tb");
+
+  function esc(s){
+    return String(s ?? "")
+      .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+  }
+
+  function tagEstado(e){
+    if(e==="vigente") return `<span class="tag t-vig">vigente</span>`;
+    if(e==="por_vencer_30") return `<span class="tag t-30">por vencer</span>`;
+    if(e==="vencido") return `<span class="tag t-ven">vencido</span>`;
+    return `<span class="tag t-sin">${esc(e||"sin_fecha")}</span>`;
+  }
+
+  async function requireSession(){
+    const { data:{ session } } = await sb.auth.getSession();
+    if(!session){
+      alert("No hay sesión. Abre tu módulo principal, inicia sesión y luego entra a este dashboard.");
+      // (si quieres, luego lo integramos al mismo archivo con navegación)
+      return null;
+    }
+    $("who").textContent = session.user.email;
+    return session;
+  }
+
+  async function loadDashboard(){
+    const session = await requireSession();
+    if(!session) return;
+
+    $("status").textContent = "Cargando...";
+    tb.innerHTML = "";
+
+    // 1) traer todo (tu vista ya calcula estado/días)
+    const { data, error } = await sb
+      .from("v_certificaciones_dashboard")
+      .select("documento,nombre,cargo,certificacion,fecha_teorica,fecha_vencimiento,dias_para_vencer,estado")
+      .order("dias_para_vencer", { ascending:true })
+      .limit(5000);
+
+    if(error){
+      $("status").textContent = "Error: " + error.message;
+      return;
+    }
+
+    // KPIs globales
+    const tot = data.length;
+    const vig = data.filter(x=>x.estado==="vigente").length;
+    const pv  = data.filter(x=>x.estado==="por_vencer_30").length;
+    const ven = data.filter(x=>x.estado==="vencido").length;
+
+    $("kpiTot").textContent = tot;
+    $("kpiVig").textContent = vig;
+    $("kpi30").textContent  = pv;
+    $("kpiVen").textContent = ven;
+
+    // filtros UI (locales)
+    const estado = $("fEstado").value;
+    const q = ($("q").value||"").trim().toLowerCase();
+    const fDias = $("fDias").value ? Number($("fDias").value) : null;
+
+    let rows = data;
+
+    if(estado) rows = rows.filter(r => r.estado === estado);
+
+    if(fDias !== null){
+      rows = rows.filter(r => typeof r.dias_para_vencer === "number" && r.dias_para_vencer <= fDias);
+    }
+
+    if(q){
+      rows = rows.filter(r =>
+        String(r.documento||"").toLowerCase().includes(q) ||
+        String(r.nombre||"").toLowerCase().includes(q) ||
+        String(r.certificacion||"").toLowerCase().includes(q)
+      );
+    }
+
+    if(!rows.length){
+      tb.innerHTML = `<tr><td colspan="8" class="small" style="text-align:center;">Sin resultados.</td></tr>`;
+      $("status").textContent = "Listo. Resultados: 0";
+      window.__lastRows = [];
+      return;
+    }
+
+    tb.innerHTML = rows.map(r => `
+      <tr>
+        <td>${esc(r.documento||"")}</td>
+        <td>${esc(r.nombre||"")}</td>
+        <td>${esc(r.cargo||"")}</td>
+        <td>${esc(r.certificacion||"")}</td>
+        <td>${esc(r.fecha_teorica||"")}</td>
+        <td>${esc(r.fecha_vencimiento||"")}</td>
+        <td>${esc(r.dias_para_vencer ?? "")}</td>
+        <td>${tagEstado(r.estado)}</td>
+      </tr>
+    `).join("");
+
+    $("status").textContent = "Listo. Resultados: " + rows.length;
+    window.__lastRows = rows;
+  }
+
+  function downloadCSV(rows){
+    const headers = ["documento","nombre","cargo","certificacion","fecha_teorica","fecha_vencimiento","dias_para_vencer","estado"];
+    const lines = [headers.join(",")];
+
+    for(const r of rows){
+      const row = headers.map(h => {
+        const v = (r[h] ?? "");
+        const s = String(v).replaceAll('"','""');
+        return `"${s}"`;
+      }).join(",");
+      lines.push(row);
+    }
+
+    const csv = lines.join("\n");
+    const blob = new Blob([csv], { type:"text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `dashboard_certificaciones_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 600);
+  }
+
+  $("btnRef").onclick = loadDashboard;
+  $("fEstado").onchange = loadDashboard;
+  $("fDias").onchange = loadDashboard;
+  $("q").oninput = ()=>{ clearTimeout(window.__t); window.__t=setTimeout(loadDashboard, 300); };
+
+  $("btnCSV").onclick = ()=> downloadCSV(window.__lastRows || []);
+  $("btnLogout").onclick = async ()=>{ await sb.auth.signOut(); location.reload(); };
+
+  // iniciar
+  loadDashboard();
+</script>
+</body>
+</html>
