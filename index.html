@@ -1492,7 +1492,7 @@ async function adminSaveIncapacity(){
   const documento = normDoc($("incDoc").value);
   const desde = val($("incDesde").value);
   const hasta = val($("incHasta").value);
-  const obs = val($("incObs").value) || null;
+  const observacion = val($("incObs").value) || null;
 
   if(!documento){
     msg.innerHTML = `<span class="err">Debes ingresar el documento.</span>`;
@@ -1509,35 +1509,52 @@ async function adminSaveIncapacity(){
 
   $("btnIncSave").disabled = true;
   $("btnIncSave").textContent = "Guardando...";
-  setStatus("Guardando incapacidad...");
+  setStatus("Buscando empleado por documento...");
 
   try{
+    // 1) Buscar employee_id por documento
+    const { data: emp, error: e0 } = await sb
+      .from("employees")
+      .select("id,documento,nombre")
+      .eq("documento", documento)
+      .maybeSingle();
+
+    if(e0) throw e0;
+    if(!emp?.id){
+      msg.innerHTML = `<span class="err">No existe ese documento en employees.</span>`;
+      setStatus(`<span class="err">Documento no encontrado en employees.</span>`);
+      return;
+    }
+
     const payload = {
-      documento,
+      employee_id: emp.id,
       desde,
       hasta,
-      obs,
-      updated_at: new Date().toISOString()
+      observacion
     };
 
+    setStatus("Guardando incapacidad...");
+
+    // 2) Upsert por employee_id (requiere UNIQUE(employee_id) o PK)
     let r = await sb
       .from("employee_incapacities")
-      .upsert(payload, { onConflict: "documento" })
-      .select("documento, desde, hasta, obs")
+      .upsert(payload, { onConflict: "employee_id" })
+      .select("id, employee_id, desde, hasta, observacion")
       .single();
 
+    // fallback si no existe UNIQUE (por si acaso)
     if(r.error && String(r.error.message||"").toLowerCase().includes("on conflict")){
-      r = await sb.from("employee_incapacities").insert(payload).select("documento, desde, hasta, obs").single();
+      r = await sb
+        .from("employee_incapacities")
+        .insert(payload)
+        .select("id, employee_id, desde, hasta, observacion")
+        .single();
     }
     if(r.error) throw r.error;
 
-    msg.innerHTML = `<span class="ok">Incapacidad registrada.</span> ${esc(documento)} (${esc(desde)} → ${esc(hasta)})`;
+    msg.innerHTML = `<span class="ok">Incapacidad registrada.</span> ${esc(documento)} · ${esc(emp.nombre || "")} (${esc(desde)} → ${esc(hasta)})`;
     setStatus(`<span class="ok">Incapacidad guardada.</span>`);
-    setLog({ incapacidad_saved: r.data });
-
-    if(STATE?.profile?.rol !== "super_admin"){
-      await trainerLoadAbsenceAlerts();
-    }
+    setLog({ incapacidad_saved: r.data, documento, employee: emp });
 
   }catch(e){
     msg.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
@@ -1548,6 +1565,7 @@ async function adminSaveIncapacity(){
     $("btnIncSave").textContent = "Registrar / Actualizar";
   }
 }
+
 
 async function adminClearIncapacity(){
   const sb = getSB();
@@ -1564,27 +1582,40 @@ async function adminClearIncapacity(){
 
   $("btnIncClear").disabled = true;
   $("btnIncClear").textContent = "Quitando...";
-  setStatus("Quitando incapacidad...");
+  setStatus("Buscando empleado por documento...");
 
   try{
+    // 1) Buscar employee_id por documento
+    const { data: emp, error: e0 } = await sb
+      .from("employees")
+      .select("id,documento,nombre")
+      .eq("documento", documento)
+      .maybeSingle();
+
+    if(e0) throw e0;
+    if(!emp?.id){
+      msg.innerHTML = `<span class="err">No existe ese documento en employees.</span>`;
+      setStatus(`<span class="err">Documento no encontrado en employees.</span>`);
+      return;
+    }
+
+    setStatus("Quitando incapacidad...");
+
+    // 2) Borrar por employee_id
     const { error } = await sb
-      .from("incapacidades")
+      .from("employee_incapacities")
       .delete()
-      .eq("documento", documento);
+      .eq("employee_id", emp.id);
 
     if(error) throw error;
 
-    msg.innerHTML = `<span class="ok">Incapacidad eliminada.</span> ${esc(documento)}`;
+    msg.innerHTML = `<span class="ok">Incapacidad eliminada.</span> ${esc(documento)} · ${esc(emp.nombre || "")}`;
     setStatus(`<span class="ok">Incapacidad eliminada.</span>`);
-    setLog({ incapacidad_deleted: documento });
+    setLog({ incapacidad_deleted: { documento, employee_id: emp.id } });
 
     $("incDesde").value = "";
     $("incHasta").value = "";
     $("incObs").value = "";
-
-    if(STATE?.profile?.rol !== "super_admin"){
-      await trainerLoadAbsenceAlerts();
-    }
 
   }catch(e){
     msg.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
@@ -2602,6 +2633,7 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
 
 
 
