@@ -1480,7 +1480,7 @@ window.adminDeleteSession = async (session_id) => {
    INCAPACIDADES (SUPER ADMIN)
    - Guarda/actualiza por documento
    - Borra por documento
-   Requiere tabla: incapacidades(documento, desde, hasta, obs, updated_at)
+ Requiere tabla: employee_incapacities(documento, desde, hasta, obs, updated_at)
    y/o un UNIQUE por documento (recomendado)
 ========================================================= */
 
@@ -1521,13 +1521,13 @@ async function adminSaveIncapacity(){
     };
 
     let r = await sb
-      .from("incapacidades")
+      .from("employee_incapacities")
       .upsert(payload, { onConflict: "documento" })
       .select("documento, desde, hasta, obs")
       .single();
 
     if(r.error && String(r.error.message||"").toLowerCase().includes("on conflict")){
-      r = await sb.from("incapacidades").insert(payload).select("documento, desde, hasta, obs").single();
+      r = await sb.from("employee_incapacities").insert(payload).select("documento, desde, hasta, obs").single();
     }
     if(r.error) throw r.error;
 
@@ -2602,6 +2602,7 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
 
 
 
