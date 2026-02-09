@@ -1540,10 +1540,11 @@ async function adminSaveIncapacity(){
     // ✅ Recomendado: onConflict por employee_id,desde,hasta (si tienes unique)
     // Si NO tienes unique, igual insertará. (ver nota abajo)
     let r = await sb
-      .from("employee_incapacities")
-      .insert(payload)
-      .select("id,employee_id,desde,hasta,observacion")
-      .single();
+  .from("employee_incapacities")
+  .upsert(payload, { onConflict: "employee_id" })
+  .select("id,employee_id,desde,hasta,observacion")
+  .single();
+
 
     if(r.error) throw r.error;
 
@@ -2628,6 +2629,7 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
 
 
 
