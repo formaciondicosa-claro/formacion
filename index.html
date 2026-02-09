@@ -825,6 +825,7 @@ function renderAdminRight(){
     <hr/>
     <div class="row">
       <button id="btnRefreshAdmin" class="btnMini btnGhost" type="button">Actualizar</button>
+
       <a class="btnMini btnGhost"
          href="./dashboard_super_admin.html"
          target="_blank"
@@ -832,10 +833,20 @@ function renderAdminRight(){
          style="display:inline-block;text-decoration:none;text-align:center;">
         Ver Dashboard
       </a>
+
+      <!-- ✅ NUEVO: Dashboard Certificaciones -->
+      <a class="btnMini btnGhost"
+         href="./dashbord_certificaciones.html"
+         target="_blank"
+         rel="noopener"
+         style="display:inline-block;text-decoration:none;text-align:center;">
+        📊 Certificaciones
+      </a>
     </div>
     <div id="adminSessions" class="list" style="margin-top:12px;"></div>
   `;
 }
+
 
 function renderTrainerLeft(){
   return `
@@ -2591,6 +2602,7 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
 
 
 
