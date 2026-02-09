@@ -2286,6 +2286,7 @@ async function trainerLoadCitadosInto(session_id){
   }
 
   try{
+    // 1) Citados
     const { data: cit, error } = await sb
       .from("citations")
       .select(`employee_id, employees ( id, documento, nombre )`)
@@ -2301,25 +2302,43 @@ async function trainerLoadCitadosInto(session_id){
 
     const empIds = cit.map(c => c.employee_id);
 
+    // 2) Asistencia SOLO para la fecha seleccionada (incluye tarde)
     const { data: at, error: e2 } = await sb
-  .from("attendance_dates")
-  .select("employee_id, asistio, tema")
-  .eq("session_id", session_id)
-  .eq("session_date", fechaSeleccionada)
-  .in("employee_id", empIds);
+      .from("attendance_dates")
+      .select("employee_id, asistio, tarde, tema")
+      .eq("session_id", session_id)
+      .eq("session_date", fechaSeleccionada)
+      .in("employee_id", empIds);
 
-if(e2) throw e2;
+    if(e2) throw e2;
 
-// ✅ Cargar tema guardado (si existe) para esta fecha
-const temaInput = sessBox.querySelector(".temaInput");
-const t = (at || []).find(x => (x.tema || "").trim() !== "")?.tema;
-if(temaInput){
-  temaInput.value = t ? t : "";
-}
+    const attMap = new Map((at || []).map(a => [a.employee_id, { asistio: a.asistio, tarde: a.tarde }]));
 
-const attMap = new Map((at || []).map(a => [a.employee_id, a.asistio]));
+    // ✅ Cargar tema guardado (si existe) para esta fecha
+    const temaInput = sessBox.querySelector(".temaInput");
+    const t = (at || []).find(x => (x.tema || "").trim() !== "")?.tema;
+    if(temaInput){
+      temaInput.value = t ? t : "";
+    }
 
+    // 3) Incapacidades para la fecha seleccionada
+    const { data: incRows, error: eInc } = await sb
+      .from("employee_incapacities")
+      .select("employee_id, desde, hasta")
+      .in("employee_id", empIds)
+      .lte("desde", fechaSeleccionada)
+      .gte("hasta", fechaSeleccionada);
 
+    if(eInc) throw eInc;
+
+    // Mapa: employee_id -> hasta (tomamos la más grande)
+    const incMap = new Map();
+    for(const r of (incRows || [])){
+      const prev = incMap.get(r.employee_id);
+      if(!prev || String(r.hasta) > String(prev)) incMap.set(r.employee_id, r.hasta);
+    }
+
+    // 4) Total días (para apto/no apto)
     const { data: datesAll, error: e3 } = await sb
       .from("session_dates")
       .select("fecha")
@@ -2348,16 +2367,22 @@ const attMap = new Map((at || []).map(a => [a.employee_id, a.asistio]));
       }
     }
 
+    // 5) Pintar filas
     for(const c of cit){
       const emp = c.employees;
       const name = emp?.nombre ? `${emp.nombre} (${emp.documento || ""})` : (c.employee_id || "");
-      const asistio = attMap.has(c.employee_id) ? attMap.get(c.employee_id) : null;
+
+      const rec = attMap.get(c.employee_id) || null;
+      const asistio = rec ? rec.asistio : null;
+      const late = rec ? (rec.tarde === true) : false;
+
+      const incHasta = incMap.get(c.employee_id) || null;
+      const tieneIncap = !!incHasta;
+      const regresa = incHasta ? addDaysISO(incHasta, 1) : null;
 
       const attended = trueMap.get(c.employee_id) || 0;
       const apto = (totalDays > 0 && attended >= totalDays);
       const prog = (totalDays > 0) ? `${attended}/${totalDays} ${apto ? "· APTO" : "· NO APTO"}` : `0/0`;
-
-      const late = isLate(session_id, c.employee_id, fechaSeleccionada);
 
       table.insertAdjacentHTML("beforeend", `
         <div class="tr">
@@ -2366,6 +2391,8 @@ const attMap = new Map((at || []).map(a => [a.employee_id, a.asistio]));
             <div class="small" style="margin-top:4px;opacity:.9;">
               <span class="${apto ? "ok":"warn"}">${esc(prog)}</span>
               ${late ? `<span class="warn"> · TARDE</span>` : ``}
+              ${tieneIncap ? `<span class="warn"> · INCAP.</span>` : ``}
+              ${regresa ? `<span class="ok"> · REGRESA: ${esc(regresa)}</span>` : ``}
             </div>
           </div>
           <div>
@@ -2397,6 +2424,7 @@ const attMap = new Map((at || []).map(a => [a.employee_id, a.asistio]));
   }
 }
 
+
 window.trainerMark = async (session_id, employee_id, session_date, asistio, tarde=false) => {
   const sb = getSB();
   setStatus("Guardando asistencia...");
@@ -2422,16 +2450,21 @@ window.trainerMark = async (session_id, employee_id, session_date, asistio, tard
   }
 
   try{
-    const payload = { session_id, employee_id, session_date, asistio: !!asistio };
-    setLog({ attendance_dates_upsert_payload: payload, tarde });
+   const payload = {
+  session_id,
+  employee_id,
+  session_date,
+  asistio: !!asistio,
+  tarde: !!tarde
+};
+setLog({ attendance_dates_upsert_payload: payload });
+
 
     const { error } = await sb
       .from("attendance_dates")
       .upsert(payload, { onConflict: "session_id,employee_id,session_date" });
 
     if(error) throw error;
-
-    setLate(session_id, employee_id, session_date, !!tarde);
 
     setStatus(`<span class="ok">Asistencia guardada.</span>`);
     await trainerLoadCitadosInto(session_id);
@@ -2629,6 +2662,7 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
 
 
 
