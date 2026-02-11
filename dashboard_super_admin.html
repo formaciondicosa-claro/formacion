@@ -1033,6 +1033,10 @@ async function renderDetailForSelectedDate(){
 
     const asistioTxt = (asistio === true) ? "Sí" : (asistio === false) ? "No" : "—";
     const obsTxt = (estado === "tarde") ? "Tarde" : "";
+    const asistioTxtFinal = tieneIncap ? "INCAP" : asistioTxt;
+    const asistClass = tieneIncap
+    ? "warn"
+    : (asistio === true ? "ok" : asistio === false ? "warn" : "");
 
     // ✅ incapacidad
     const incHasta = incMap.get(c.employee_id) || null;
@@ -1043,7 +1047,7 @@ async function renderDetailForSelectedDate(){
       <div class="tr">
         <div>${esc(emp.nombre || "")}</div>
         <div>${esc(emp.documento || "")}</div>
-        <div class="${asistio === true ? "ok" : asistio === false ? "warn" : ""}">${esc(asistioTxt)}</div>
+       <div class="${asistClass}">${esc(asistioTxtFinal)}</div>
         <div class="small">${esc(obsTxt)}</div>
         <div class="${tieneIncap ? "warn" : "small"}">${tieneIncap ? `INCAP. ${esc(incHasta)}` : "—"}</div>
         <div class="${tieneIncap ? "ok" : "small"}">${tieneIncap ? esc(regresa) : "—"}</div>
@@ -1305,6 +1309,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
