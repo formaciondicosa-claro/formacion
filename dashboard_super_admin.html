@@ -1032,16 +1032,19 @@ async function renderDetailForSelectedDate(){
     const estado  = rec ? (rec.estado || "") : ""; // "tarde" si aplica
 
     const asistioTxt = (asistio === true) ? "Sí" : (asistio === false) ? "No" : "—";
-    const obsTxt = (estado === "tarde") ? "Tarde" : "";
-    const asistioTxtFinal = tieneIncap ? "INCAP" : asistioTxt;
-    const asistClass = tieneIncap
-    ? "warn"
-    : (asistio === true ? "ok" : asistio === false ? "warn" : "");
+const obsTxt = (estado === "tarde") ? "Tarde" : "";
 
-    // ✅ incapacidad
-    const incHasta = incMap.get(c.employee_id) || null;
-    const tieneIncap = !!incHasta;
-    const regresa = incHasta ? addDaysISO(incHasta, 1) : "";
+// ✅ incapacidad (primero definimos)
+const incHasta = incMap.get(c.employee_id) || null;
+const tieneIncap = !!incHasta;
+const regresa = incHasta ? addDaysISO(incHasta, 1) : "";
+
+// ✅ si está en incapacidad, “Asistió” debe mostrar INCAP
+const asistioTxtFinal = tieneIncap ? "INCAP" : asistioTxt;
+const asistClass = tieneIncap
+  ? "warn"
+  : (asistio === true ? "ok" : asistio === false ? "warn" : "");
+
 
     dt.innerHTML += `
       <div class="tr">
@@ -1309,6 +1312,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
