@@ -1092,29 +1092,11 @@ function wireAdminHandlers(){
 
 
 async function adminLoadSessions(){
-  const sb = getSB();
-  const cont = $("adminSessions");
-  cont.innerHTML = `<div class="small">Cargando...</div>`;
+  // ✅ ORDEN: primero abiertas, luego cerradas
+  const abiertas = (data || []).filter(s => String(s.estado || "").toLowerCase() !== "cerrada");
+  const cerradas = (data || []).filter(s => String(s.estado || "").toLowerCase() === "cerrada");
 
-  const { data, error } = await sb
-    .from("sessions")
-    .select(`id, training_id, fecha, ciudad, formador_user_id, estado, created_at, trainings ( nombre )`)
-    .order("fecha", { ascending:false })
-    .limit(50);
-
-  if(error){
-    cont.innerHTML = `<div class="small"><span class="err">Error:</span> ${esc(error.message)}</div>`;
-    setStatus(`<span class="err">Error sessions:</span> ${esc(error.message)}`);
-    setLog(error);
-    return;
-  }
-
-  if(!data?.length){
-    cont.innerHTML = `<div class="item"><div class="small">No hay sesiones registradas.</div></div>`;
-    return;
-  }
-
-  cont.innerHTML = data.map(s => {
+  const renderSessionItem = (s) => {
     const trName = s.trainings?.nombre || "Entrenamiento";
     return `
       <div class="item">
@@ -1143,7 +1125,6 @@ async function adminLoadSessions(){
           <button class="btnMini btnDanger" type="button" onclick="adminDeleteSession('${s.id}')">Eliminar sesión</button>
         </div>
 
-        <!-- ✅ mini panel oculto para agregar día -->
         <div id="addDay_${s.id}" class="hidden" style="margin-top:10px;">
           <div class="small"><b>Agregar día a esta sesión</b></div>
 
@@ -1167,9 +1148,22 @@ async function adminLoadSessions(){
         </div>
       </div>
     `;
-  }).join("");
-}
+  };
 
+  cont.innerHTML = `
+    <div class="item" style="border-style:dashed;">
+      <b>✅ Abiertas (${abiertas.length})</b>
+      <div class="small">Sesiones que aún puedes cerrar.</div>
+    </div>
+    ${abiertas.map(renderSessionItem).join("")}
+    <div style="height:10px;"></div>
+    <div class="item" style="border-style:dashed; opacity:.9;">
+      <b>📁 Cerradas (${cerradas.length})</b>
+      <div class="small">Histórico (ya cerradas).</div>
+    </div>
+    ${cerradas.map(renderSessionItem).join("")}
+  `;
+}
 
 async function adminLoadSessionSelects(){
   const sb = getSB();
@@ -2772,3 +2766,4 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
