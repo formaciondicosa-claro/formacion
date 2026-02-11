@@ -1122,46 +1122,53 @@ async function adminLoadSessions(){
           <div><b>${esc(trName)}</b></div>
           <span class="chip">${esc(s.estado || "—")}</span>
         </div>
+
         <div class="small" style="margin-top:6px;">Sesión · ${esc(s.fecha)} · ${esc(s.ciudad || "")}</div>
+
         <div class="kv">
           <div>session_id</div><div><code>${esc(s.id)}</code></div>
           <div>training_id</div><div><code>${esc(s.training_id || "")}</code></div>
           <div>formador_user_id</div><div><code>${esc(s.formador_user_id || "")}</code></div>
         </div>
+
         <div class="actions">
-  ${
-    (String(s.estado||"").toLowerCase() === "cerrada")
-    ? `<button class="btnMini btnGhost" type="button" onclick="adminSetSessionStatus('${s.id}','programada')">Reabrir</button>`
-    : `<button class="btnMini btnGhost" type="button" onclick="adminSetSessionStatus('${s.id}','cerrada')">Cerrar sesión</button>`
-  }
+          ${
+            (String(s.estado||"").toLowerCase() === "cerrada")
+            ? `<button class="btnMini btnGhost" type="button" onclick="adminSetSessionStatus('${s.id}','programada')">Reabrir</button>`
+            : `<button class="btnMini btnGhost" type="button" onclick="adminSetSessionStatus('${s.id}','cerrada')">Cerrar sesión</button>`
+          }
 
-  <button class="btnMini btnGhost" type="button" onclick="adminOpenAddDay('${s.id}')">➕ Agregar días</button>
+          <button class="btnMini btnGhost" type="button" onclick="adminOpenAddDay('${s.id}')">➕ Agregar días</button>
 
-  <button class="btnMini btnDanger" type="button" onclick="adminDeleteSession('${s.id}')">Eliminar sesión</button>
-</div>
+          <button class="btnMini btnDanger" type="button" onclick="adminDeleteSession('${s.id}')">Eliminar sesión</button>
+        </div>
 
-<!-- ✅ mini panel oculto para agregar día -->
-<div id="addDay_${s.id}" class="hidden" style="margin-top:10px;">
-  <div class="small"><b>Agregar día a esta sesión</b></div>
+        <!-- ✅ mini panel oculto para agregar día -->
+        <div id="addDay_${s.id}" class="hidden" style="margin-top:10px;">
+          <div class="small"><b>Agregar día a esta sesión</b></div>
 
-  <div class="row" style="margin-top:8px;">
-    <div class="col">
-      <label>Nueva fecha</label>
-      <input id="addDate_${s.id}" type="date" />
-    </div>
-    <div class="col">
-      <label>Tema visto (opcional)</label>
-      <input id="addTema_${s.id}" placeholder="Ej: práctica / evaluación" />
-    </div>
-  </div>
+          <div class="row" style="margin-top:8px;">
+            <div class="col">
+              <label>Nueva fecha</label>
+              <input id="addDate_${s.id}" type="date" />
+            </div>
+            <div class="col">
+              <label>Tema visto (opcional)</label>
+              <input id="addTema_${s.id}" placeholder="Ej: práctica / evaluación" />
+            </div>
+          </div>
 
-  <div class="row" style="margin-top:8px;">
-    <button class="btnMini btnGhost" type="button" onclick="adminAddDay('${s.id}')">Guardar día</button>
-    <button class="btnMini btnDanger" type="button" onclick="adminCloseAddDay('${s.id}')">Cerrar</button>
-  </div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btnMini btnGhost" type="button" onclick="adminAddDay('${s.id}')">Guardar día</button>
+            <button class="btnMini btnDanger" type="button" onclick="adminCloseAddDay('${s.id}')">Cerrar</button>
+          </div>
 
-  <div id="addMsg_${s.id}" class="small" style="margin-top:6px;"></div>
-</div>
+          <div id="addMsg_${s.id}" class="small" style="margin-top:6px;"></div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
 
 
 async function adminLoadSessionSelects(){
@@ -2765,25 +2772,3 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
