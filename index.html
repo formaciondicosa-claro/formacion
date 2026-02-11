@@ -1092,78 +1092,118 @@ function wireAdminHandlers(){
 
 
 async function adminLoadSessions(){
-  // ✅ ORDEN: primero abiertas, luego cerradas
-  const abiertas = (data || []).filter(s => String(s.estado || "").toLowerCase() !== "cerrada");
-  const cerradas = (data || []).filter(s => String(s.estado || "").toLowerCase() === "cerrada");
+  const sb = getSB();
+  const cont = $("adminSessions");
+  if(!cont) return;
 
-  const renderSessionItem = (s) => {
-    const trName = s.trainings?.nombre || "Entrenamiento";
-    return `
+  cont.innerHTML = `<div class="small">Cargando...</div>`;
+
+  try{
+    // 1) traer sesiones (últimas 50)
+    const { data, error } = await sb
+      .from("sessions")
+      .select(`id, fecha, ciudad, estado, training_id, formador_user_id, trainings ( nombre )`)
+      .order("fecha", { ascending:false })
+      .limit(50);
+
+    if(error) throw error;
+
+    if(!data?.length){
+      cont.innerHTML = `<div class="item"><div class="small">No hay sesiones.</div></div>`;
+      return;
+    }
+
+    // 2) separar abiertas/cerradas
+    const abiertas = data.filter(s => String(s.estado || "").toLowerCase() !== "cerrada");
+    const cerradas = data.filter(s => String(s.estado || "").toLowerCase() === "cerrada");
+
+    // 3) renderer de cada tarjeta
+    const renderSessionItem = (s) => {
+      const trName = s.trainings?.nombre || "Entrenamiento";
+      const est = String(s.estado || "").toLowerCase();
+
+      return `
+        <div class="item">
+          <div class="row" style="justify-content:space-between;">
+            <div><b>${esc(trName)}</b></div>
+            <span class="chip">${esc(s.estado || "—")}</span>
+          </div>
+
+          <div class="small" style="margin-top:6px;">
+            Sesión · ${esc(s.fecha)} · ${esc(s.ciudad || "")}
+          </div>
+
+          <div class="kv">
+            <div>session_id</div><div><code>${esc(s.id)}</code></div>
+            <div>training_id</div><div><code>${esc(s.training_id || "")}</code></div>
+            <div>formador_user_id</div><div><code>${esc(s.formador_user_id || "")}</code></div>
+          </div>
+
+          <div class="actions">
+            ${
+              (est === "cerrada")
+              ? `<button class="btnMini btnGhost" type="button" onclick="adminSetSessionStatus('${s.id}','programada')">Reabrir</button>`
+              : `<button class="btnMini btnGhost" type="button" onclick="adminSetSessionStatus('${s.id}','cerrada')">Cerrar sesión</button>`
+            }
+
+            <button class="btnMini btnGhost" type="button" onclick="adminOpenAddDay('${s.id}')">➕ Agregar días</button>
+
+            <button class="btnMini btnDanger" type="button" onclick="adminDeleteSession('${s.id}')">Eliminar sesión</button>
+          </div>
+
+          <div id="addDay_${s.id}" class="hidden" style="margin-top:10px;">
+            <div class="small"><b>Agregar día a esta sesión</b></div>
+
+            <div class="row" style="margin-top:8px;">
+              <div class="col">
+                <label>Nueva fecha</label>
+                <input id="addDate_${s.id}" type="date" />
+              </div>
+              <div class="col">
+                <label>Tema visto (opcional)</label>
+                <input id="addTema_${s.id}" placeholder="Ej: práctica / evaluación" />
+              </div>
+            </div>
+
+            <div class="row" style="margin-top:8px;">
+              <button class="btnMini btnGhost" type="button" onclick="adminAddDay('${s.id}')">Guardar día</button>
+              <button class="btnMini btnDanger" type="button" onclick="adminCloseAddDay('${s.id}')">Cerrar</button>
+            </div>
+
+            <div id="addMsg_${s.id}" class="small" style="margin-top:6px;"></div>
+          </div>
+        </div>
+      `;
+    };
+
+    // 4) pintar: abiertas arriba, cerradas abajo
+    cont.innerHTML = `
+      <div class="item" style="border-style:dashed;">
+        <b>✅ Abiertas (${abiertas.length})</b>
+        <div class="small">Sesiones que aún puedes cerrar.</div>
+      </div>
+      ${abiertas.map(renderSessionItem).join("")}
+
+      <div style="height:10px;"></div>
+
+      <div class="item" style="border-style:dashed; opacity:.9;">
+        <b>📁 Cerradas (${cerradas.length})</b>
+        <div class="small">Histórico (ya cerradas).</div>
+      </div>
+      ${cerradas.map(renderSessionItem).join("")}
+    `;
+
+  }catch(e){
+    cont.innerHTML = `
       <div class="item">
-        <div class="row" style="justify-content:space-between;">
-          <div><b>${esc(trName)}</b></div>
-          <span class="chip">${esc(s.estado || "—")}</span>
-        </div>
-
-        <div class="small" style="margin-top:6px;">Sesión · ${esc(s.fecha)} · ${esc(s.ciudad || "")}</div>
-
-        <div class="kv">
-          <div>session_id</div><div><code>${esc(s.id)}</code></div>
-          <div>training_id</div><div><code>${esc(s.training_id || "")}</code></div>
-          <div>formador_user_id</div><div><code>${esc(s.formador_user_id || "")}</code></div>
-        </div>
-
-        <div class="actions">
-          ${
-            (String(s.estado||"").toLowerCase() === "cerrada")
-            ? `<button class="btnMini btnGhost" type="button" onclick="adminSetSessionStatus('${s.id}','programada')">Reabrir</button>`
-            : `<button class="btnMini btnGhost" type="button" onclick="adminSetSessionStatus('${s.id}','cerrada')">Cerrar sesión</button>`
-          }
-
-          <button class="btnMini btnGhost" type="button" onclick="adminOpenAddDay('${s.id}')">➕ Agregar días</button>
-
-          <button class="btnMini btnDanger" type="button" onclick="adminDeleteSession('${s.id}')">Eliminar sesión</button>
-        </div>
-
-        <div id="addDay_${s.id}" class="hidden" style="margin-top:10px;">
-          <div class="small"><b>Agregar día a esta sesión</b></div>
-
-          <div class="row" style="margin-top:8px;">
-            <div class="col">
-              <label>Nueva fecha</label>
-              <input id="addDate_${s.id}" type="date" />
-            </div>
-            <div class="col">
-              <label>Tema visto (opcional)</label>
-              <input id="addTema_${s.id}" placeholder="Ej: práctica / evaluación" />
-            </div>
-          </div>
-
-          <div class="row" style="margin-top:8px;">
-            <button class="btnMini btnGhost" type="button" onclick="adminAddDay('${s.id}')">Guardar día</button>
-            <button class="btnMini btnDanger" type="button" onclick="adminCloseAddDay('${s.id}')">Cerrar</button>
-          </div>
-
-          <div id="addMsg_${s.id}" class="small" style="margin-top:6px;"></div>
-        </div>
+        <div class="small"><span class="err">Error cargando sesiones:</span> ${esc(e.message || e)}</div>
       </div>
     `;
-  };
-
-  cont.innerHTML = `
-    <div class="item" style="border-style:dashed;">
-      <b>✅ Abiertas (${abiertas.length})</b>
-      <div class="small">Sesiones que aún puedes cerrar.</div>
-    </div>
-    ${abiertas.map(renderSessionItem).join("")}
-    <div style="height:10px;"></div>
-    <div class="item" style="border-style:dashed; opacity:.9;">
-      <b>📁 Cerradas (${cerradas.length})</b>
-      <div class="small">Histórico (ya cerradas).</div>
-    </div>
-    ${cerradas.map(renderSessionItem).join("")}
-  `;
+    setStatus(`<span class="err">Error cargando sesiones.</span>`);
+    setLog(e);
+  }
 }
+
 
 async function adminLoadSessionSelects(){
   const sb = getSB();
@@ -2766,4 +2806,5 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
 
