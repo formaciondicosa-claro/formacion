@@ -1531,19 +1531,27 @@ async function adminSaveIncapacity(){
     setStatus("Guardando incapacidad...");
 
     const payload = {
-      employee_id: emp.id,
-      desde,
-      hasta,
-      observacion
-    };
+  employee_id: emp.id,     // ✅ lo que usa la BD
+  desde,
+  hasta,
+  observacion
+};
 
-    // ✅ Recomendado: onConflict por employee_id,desde,hasta (si tienes unique)
-    // Si NO tienes unique, igual insertará. (ver nota abajo)
-    let r = await sb
+let r = await sb
   .from("employee_incapacities")
   .upsert(payload, { onConflict: "employee_id" })
   .select("id,employee_id,desde,hasta,observacion")
   .single();
+
+// fallback si no existe unique y supabase se queja
+if (r.error && String(r.error.message || "").toLowerCase().includes("on conflict")) {
+  r = await sb
+    .from("employee_incapacities")
+    .insert(payload)
+    .select("id,employee_id,desde,hasta,observacion")
+    .single();
+}
+if (r.error) throw r.error;
 
 
     if(r.error) throw r.error;
@@ -2391,8 +2399,8 @@ async function trainerLoadCitadosInto(session_id){
             <div class="small" style="margin-top:4px;opacity:.9;">
               <span class="${apto ? "ok":"warn"}">${esc(prog)}</span>
               ${late ? `<span class="warn"> · TARDE</span>` : ``}
-              ${tieneIncap ? `<span class="warn"> · INCAP.</span>` : ``}
-              ${regresa ? `<span class="ok"> · REGRESA: ${esc(regresa)}</span>` : ``}
+             ${tieneIncap ? `<span class="warn"> · INCAP.</span> <span class="small">${esc(incHasta)}</span>` : ``}
+           ${regresa ? `<span class="ok"> · REGRESA: ${esc(regresa)}</span>` : ``}
             </div>
           </div>
           <div>
@@ -2662,6 +2670,7 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
 
 
 
