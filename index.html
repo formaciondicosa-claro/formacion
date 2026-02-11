@@ -1134,14 +1134,35 @@ async function adminLoadSessions(){
     ? `<button class="btnMini btnGhost" type="button" onclick="adminSetSessionStatus('${s.id}','programada')">Reabrir</button>`
     : `<button class="btnMini btnGhost" type="button" onclick="adminSetSessionStatus('${s.id}','cerrada')">Cerrar sesión</button>`
   }
+
+  <button class="btnMini btnGhost" type="button" onclick="adminOpenAddDay('${s.id}')">➕ Agregar días</button>
+
   <button class="btnMini btnDanger" type="button" onclick="adminDeleteSession('${s.id}')">Eliminar sesión</button>
 </div>
 
-          
-      </div>
-    `;
-  }).join("");
-}
+<!-- ✅ mini panel oculto para agregar día -->
+<div id="addDay_${s.id}" class="hidden" style="margin-top:10px;">
+  <div class="small"><b>Agregar día a esta sesión</b></div>
+
+  <div class="row" style="margin-top:8px;">
+    <div class="col">
+      <label>Nueva fecha</label>
+      <input id="addDate_${s.id}" type="date" />
+    </div>
+    <div class="col">
+      <label>Tema visto (opcional)</label>
+      <input id="addTema_${s.id}" placeholder="Ej: práctica / evaluación" />
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:8px;">
+    <button class="btnMini btnGhost" type="button" onclick="adminAddDay('${s.id}')">Guardar día</button>
+    <button class="btnMini btnDanger" type="button" onclick="adminCloseAddDay('${s.id}')">Cerrar</button>
+  </div>
+
+  <div id="addMsg_${s.id}" class="small" style="margin-top:6px;"></div>
+</div>
+
 
 async function adminLoadSessionSelects(){
   const sb = getSB();
@@ -1383,8 +1404,82 @@ window.adminDeleteSession = async (session_id) => {
     setLog(e);
   }
 };
+  window.adminOpenAddDay = (session_id) => {
+  const box = document.getElementById(`addDay_${session_id}`);
+  if(!box) return;
+  box.classList.remove("hidden");
 
-  
+  const msg = document.getElementById(`addMsg_${session_id}`);
+  if(msg) msg.innerHTML = "";
+};
+
+window.adminCloseAddDay = (session_id) => {
+  const box = document.getElementById(`addDay_${session_id}`);
+  if(!box) return;
+  box.classList.add("hidden");
+};
+
+window.adminAddDay = async (session_id) => {
+  const sb = getSB();
+
+  const dateEl = document.getElementById(`addDate_${session_id}`);
+  const temaEl = document.getElementById(`addTema_${session_id}`);
+  const msgEl  = document.getElementById(`addMsg_${session_id}`);
+
+  const fecha = (dateEl?.value || "").trim();
+  const tema  = (temaEl?.value || "").trim();
+
+  if(msgEl) msgEl.innerHTML = "";
+  if(!fecha){
+    if(msgEl) msgEl.innerHTML = `<span class="warn">Debes seleccionar una fecha.</span>`;
+    return;
+  }
+
+  try{
+    setStatus("Validando fechas actuales...");
+
+    // 1) leer fechas existentes de esa sesión
+    const { data: existing, error: e1 } = await sb
+      .from("session_dates")
+      .select("fecha")
+      .eq("session_id", session_id);
+
+    if(e1) throw e1;
+
+    const exists = (existing || []).some(r => String(r.fecha) === String(fecha));
+    if(exists){
+      if(msgEl) msgEl.innerHTML = `<span class="warn">Esa fecha ya existe en la sesión.</span>`;
+      return;
+    }
+
+    setStatus("Guardando nuevo día...");
+
+    // 2) insertar nueva fecha
+    const payload = {
+      session_id: session_id,
+      fecha: fecha,
+      tema_visto: tema || null
+    };
+
+    const { error: e2 } = await sb
+      .from("session_dates")
+      .insert([payload]);
+
+    if(e2) throw e2;
+
+    if(msgEl) msgEl.innerHTML = `<span class="ok">Día agregado: ${esc(fecha)}</span>`;
+    setStatus(`<span class="ok">Día agregado.</span>`);
+
+    // limpiar inputs
+    if(dateEl) dateEl.value = "";
+    if(temaEl) temaEl.value = "";
+
+  }catch(e){
+    if(msgEl) msgEl.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
+    setStatus(`<span class="err">No se pudo agregar día.</span>`);
+    setLog(e);
+  }
+};  
  async function adminUploadEmployees(){
   const sb = getSB();
   const file = $("empFile").files?.[0];
@@ -2670,6 +2765,7 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
 
 
 
