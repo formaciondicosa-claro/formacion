@@ -2529,11 +2529,13 @@ for(const c of cit){
   const emp = c.employees;
 
   // ✅ Si está entregado/retirado desde una fecha <= fecha seleccionada, no se muestra
-  const ex = exitMap.get(c.employee_id) || null;
-  const exitDate = ex?.exit_date || null;
-  if(exitDate && String(exitDate) <= String(fechaSeleccionada)){
-    continue;
-  }
+ const ex = exitMap.get(c.employee_id) || null;
+const exitDate = ex?.exit_date || null;
+
+const yaEntregadoHoy = exitDate && String(fechaSeleccionada) >= String(exitDate);
+
+
+
 
   const name = emp?.nombre ? `${emp.nombre} (${emp.documento || ""})` : (c.employee_id || "");
 
@@ -2557,14 +2559,33 @@ for(const c of cit){
   table.insertAdjacentHTML("beforeend", `
     <div class="tr">
       <div class="small">
-        ${esc(name)}
-        <div class="small" style="margin-top:4px;opacity:.9;">
-          <span class="${apto ? "ok":"warn"}">${esc(prog)}</span>
-          ${late ? `<span class="warn"> · TARDE</span>` : ``}
-          ${tieneIncap ? `<span class="warn"> · INCAP.</span> <span class="small">${esc(incHasta)}</span>` : ``}
-          ${regresa ? `<span class="ok"> · REGRESA: ${esc(regresa)}</span>` : ``}
-        </div>
-      </div>
+  ${esc(name)}
+
+  <div class="small" style="margin-top:4px;opacity:.9;">
+    <span class="${apto ? "ok":"warn"}">${esc(prog)}</span>
+    ${late ? `<span class="warn"> · TARDE</span>` : ``}
+    ${tieneIncap ? `<span class="warn"> · INCAP.</span> <span class="small">${esc(incHasta)}</span>` : ``}
+    ${regresa ? `<span class="ok"> · REGRESA: ${esc(regresa)}</span>` : ``}
+  </div>
+
+  <!-- ✅ BOTÓN ENTREGAR -->
+  <div class="actions" style="margin-top:8px;">
+    ${
+  yaEntregadoHoy
+  ? `<button class="btnMini btnDanger"
+       onclick="trainerUndoHandOver('${session_id}','${c.employee_id}')">
+       Quitar entrega
+     </button>
+     <span class="small">Entregado desde ${esc(exitDate)}</span>`
+  : `<button class="btnMini btnGhost"
+       onclick="trainerHandOver('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}')">
+       Entregar a operación
+     </button>`
+}
+
+  </div>
+</div>
+
 
       <div>
         <button class="btnMini btnOk" type="button"
@@ -2630,6 +2651,8 @@ window.trainerMark = async (session_id, employee_id, session_date, asistio, tard
   asistio: !!asistio,
   tarde: !!tarde
 };
+    
+
 setLog({ attendance_dates_upsert_payload: payload });
 
 
@@ -2647,7 +2670,69 @@ setLog({ attendance_dates_upsert_payload: payload });
     setLog(err);
   }
 };
+window.trainerHandOver = async (session_id, employee_id, exit_date) => {
+  const sb = getSB();
+  try{
+    const motivo = prompt("Motivo de entrega a operación (opcional):", "Entrega parcial") || null;
 
+    const payload = {
+      session_id,
+      employee_id,
+      exit_date,     // fecha desde la cual ya no debe aparecer
+      motivo
+    };
+
+    setStatus("Guardando entrega a operación...");
+
+    let r = await sb
+      .from("session_exits")
+      .upsert(payload, { onConflict: "session_id,employee_id" })
+      .select("id,session_id,employee_id,exit_date,motivo")
+      .single();
+
+    // fallback si no existe unique
+    if(r.error && String(r.error.message || "").toLowerCase().includes("on conflict")){
+      r = await sb
+        .from("session_exits")
+        .insert(payload)
+        .select("id,session_id,employee_id,exit_date,motivo")
+        .single();
+    }
+    if(r.error) throw r.error;
+
+    setStatus(`<span class="ok">Entregado a operación.</span> Desde: <code>${esc(exit_date)}</code>`);
+    setLog({ session_exit_saved: r.data });
+
+    await trainerLoadCitadosInto(session_id); // refrescar tabla
+  }catch(e){
+    setStatus(`<span class="err">Error entregando:</span> ${esc(e.message || e)}`);
+    setLog(e);
+  }
+};
+
+window.trainerUndoHandOver = async (session_id, employee_id) => {
+  const sb = getSB();
+  if(!confirm("¿Quitar entrega a operación y volver a mostrar a esta persona?")) return;
+
+  try{
+    setStatus("Quitando entrega a operación...");
+    const { error } = await sb
+      .from("session_exits")
+      .delete()
+      .eq("session_id", session_id)
+      .eq("employee_id", employee_id);
+
+    if(error) throw error;
+
+    setStatus(`<span class="ok">Entrega revertida.</span>`);
+    setLog({ session_exit_deleted: { session_id, employee_id } });
+
+    await trainerLoadCitadosInto(session_id);
+  }catch(e){
+    setStatus(`<span class="err">Error revirtiendo:</span> ${esc(e.message || e)}`);
+    setLog(e);
+  }
+};
 /* =========================================================
    INIT
 ========================================================= */
@@ -2760,6 +2845,17 @@ window.trainerExportSessionCSV = async (session_id) => {
     }
 
     const empIds = cit.map(c => c.employee_id).filter(Boolean);
+    // 3.5) ENTREGADOS / RETIROS (session_exits) para exportación
+const { data: exits, error: eX } = await sb
+  .from("session_exits")
+  .select("employee_id, exit_date")
+  .eq("session_id", session_id)
+  .in("employee_id", empIds);
+
+if(eX) throw eX;
+
+const exitMap = new Map((exits || []).map(x => [x.employee_id, x.exit_date]));
+
 
     // 4) Asistencias de todas las fechas (y tema)
     const { data: atAll, error: e3 } = await sb
@@ -2790,6 +2886,10 @@ window.trainerExportSessionCSV = async (session_id) => {
     for(const f of allFechas){
       for(const c of cit){
         const emp = c.employees || {};
+        const exitDate = exitMap.get(c.employee_id) || null;
+        if(exitDate && String(f) >= String(exitDate)){
+        continue; 
+        }
         const doc = (emp.documento ?? "").toString().replaceAll('"','""');
         const nom = (emp.nombre ?? "").toString().replaceAll('"','""');
 
@@ -2835,6 +2935,7 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
 
 
 
