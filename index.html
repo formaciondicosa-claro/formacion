@@ -2445,6 +2445,18 @@ async function trainerLoadCitadosInto(session_id){
     }
 
     const empIds = cit.map(c => c.employee_id);
+    // 2.6) ENTREGADOS / RETIROS (session_exits)
+    const { data: exits, error: eX } = await sb
+      .from("session_exits")
+      .select("employee_id, exit_date, motivo")
+      .eq("session_id", session_id)
+      .in("employee_id", empIds);
+
+    if(eX) throw eX;
+
+    const exitMap = new Map(
+      (exits || []).map(x => [x.employee_id, { exit_date: x.exit_date, motivo: x.motivo }])
+    );
 
     // 2) Asistencia SOLO para la fecha seleccionada (incluye tarde)
     const { data: at, error: e2 } = await sb
@@ -2512,51 +2524,68 @@ async function trainerLoadCitadosInto(session_id){
     }
 
     // 5) Pintar filas
-    for(const c of cit){
-      const emp = c.employees;
-      const name = emp?.nombre ? `${emp.nombre} (${emp.documento || ""})` : (c.employee_id || "");
+    // 5) Pintar filas
+for(const c of cit){
+  const emp = c.employees;
 
-      const rec = attMap.get(c.employee_id) || null;
-      const asistio = rec ? rec.asistio : null;
-      const late = rec ? (rec.tarde === true) : false;
+  // ✅ Si está entregado/retirado desde una fecha <= fecha seleccionada, no se muestra
+  const ex = exitMap.get(c.employee_id) || null;
+  const exitDate = ex?.exit_date || null;
+  if(exitDate && String(exitDate) <= String(fechaSeleccionada)){
+    continue;
+  }
 
-      const incHasta = incMap.get(c.employee_id) || null;
-      const tieneIncap = !!incHasta;
-      const regresa = incHasta ? addDaysISO(incHasta, 1) : null;
+  const name = emp?.nombre ? `${emp.nombre} (${emp.documento || ""})` : (c.employee_id || "");
 
-      const attended = trueMap.get(c.employee_id) || 0;
-      const apto = (totalDays > 0 && attended >= totalDays);
-      const prog = (totalDays > 0) ? `${attended}/${totalDays} ${apto ? "· APTO" : "· NO APTO"}` : `0/0`;
+  // ✅ asistencia del día seleccionado
+  const rec = attMap.get(c.employee_id) || null;
+  const asistio = rec ? rec.asistio : null;
+  const late = rec ? (rec.tarde === true) : false;
 
-      table.insertAdjacentHTML("beforeend", `
-        <div class="tr">
-          <div class="small">
-            ${esc(name)}
-            <div class="small" style="margin-top:4px;opacity:.9;">
-              <span class="${apto ? "ok":"warn"}">${esc(prog)}</span>
-              ${late ? `<span class="warn"> · TARDE</span>` : ``}
-             ${tieneIncap ? `<span class="warn"> · INCAP.</span> <span class="small">${esc(incHasta)}</span>` : ``}
-           ${regresa ? `<span class="ok"> · REGRESA: ${esc(regresa)}</span>` : ``}
-            </div>
-          </div>
-          <div>
-            <button class="btnMini btnOk" type="button"
-              onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',true,false)"
-              ${asistio === true && !late ? 'disabled' : ''}>Sí</button>
-          </div>
-          <div>
-            <button class="btnMini btnBad" type="button"
-              onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',false,false)"
-              ${asistio === false ? 'disabled' : ''}>No</button>
-          </div>
-          <div>
-            <button class="btnMini btnGhost" type="button"
-              onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',true,true)"
-              ${late ? 'disabled' : ''}>Tarde</button>
-          </div>
+  // ✅ incapacidad (para ese día)
+  const incHasta = incMap.get(c.employee_id) || null;
+  const tieneIncap = !!incHasta;
+  const regresa = incHasta ? addDaysISO(incHasta, 1) : null;
+
+  // ✅ progreso apto/no apto (conteo de días asistidos)
+  const attended = trueMap.get(c.employee_id) || 0;
+  const apto = (totalDays > 0 && attended >= totalDays);
+  const prog = (totalDays > 0)
+    ? `${attended}/${totalDays} ${apto ? "· APTO" : "· NO APTO"}`
+    : `0/0`;
+
+  table.insertAdjacentHTML("beforeend", `
+    <div class="tr">
+      <div class="small">
+        ${esc(name)}
+        <div class="small" style="margin-top:4px;opacity:.9;">
+          <span class="${apto ? "ok":"warn"}">${esc(prog)}</span>
+          ${late ? `<span class="warn"> · TARDE</span>` : ``}
+          ${tieneIncap ? `<span class="warn"> · INCAP.</span> <span class="small">${esc(incHasta)}</span>` : ``}
+          ${regresa ? `<span class="ok"> · REGRESA: ${esc(regresa)}</span>` : ``}
         </div>
-      `);
-    }
+      </div>
+
+      <div>
+        <button class="btnMini btnOk" type="button"
+          onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',true,false)"
+          ${asistio === true && !late ? 'disabled' : ''}>Sí</button>
+      </div>
+
+      <div>
+        <button class="btnMini btnBad" type="button"
+          onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',false,false)"
+          ${asistio === false ? 'disabled' : ''}>No</button>
+      </div>
+
+      <div>
+        <button class="btnMini btnGhost" type="button"
+          onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',true,true)"
+          ${late ? 'disabled' : ''}>Tarde</button>
+      </div>
+    </div>
+  `);
+}
 
   }catch(err){
     table.insertAdjacentHTML("beforeend", `
@@ -2806,5 +2835,6 @@ window.trainerExportSessionCSV = async (session_id) => {
 
 </body>
 </html>
+
 
 
