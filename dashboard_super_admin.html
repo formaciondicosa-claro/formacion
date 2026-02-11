@@ -152,13 +152,13 @@ code{color:#fff;}
 }
 #summaryByDate .tr > div{ min-width:0; word-break:break-word; overflow-wrap:break-word; }
 
-/* ✅ DETALLE POR EMPLEADO: 4 columnas */
 #detailTable .tr{
   display:grid !important;
-  grid-template-columns: 1fr 160px 120px 1fr !important;
+  grid-template-columns: 1fr 160px 120px 1fr 110px 140px !important;
   gap:10px;
   align-items:center;
 }
+
 #detailTable .tr > div{ min-width:0; overflow-wrap:break-word; word-break:break-word; }
 
 /* ✅ HISTORIAL: columnas fijas y estables */
@@ -342,9 +342,10 @@ code{color:#fff;}
 
         <div class="tablelike" style="margin-top:10px;" id="detailTable">
   <div class="tr th">
-    <div>Empleado</div><div>Documento</div><div>Asistió</div><div>Obs.</div>
+    <div>Empleado</div><div>Documento</div><div>Asistió</div><div>Obs.</div><div>Incap.</div><div>Regresa</div>
   </div>
 </div>
+
 
         <div class="small" style="margin-top:10px;" id="rightMsg"></div>
 
@@ -411,6 +412,15 @@ function downloadTextFile(content, filename, mime){
   a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 600);
 }
+  function addDaysISO(isoDate, days){
+  const d = new Date(isoDate + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const dd = String(d.getDate()).padStart(2,"0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 
 /* =======================
    SUPABASE CLIENT
@@ -526,7 +536,9 @@ async function boot(){
   $("btnApply").onclick = loadSessions;
   $("btnClear").onclick = clearFilters;
 
-  $("datePick").onchange = () => renderDetailForSelectedDate();
+ $("datePick").onchange = () => renderDetailForSelectedDate();
+
+
 
   $("btnCsvDate").onclick = exportCsvSelectedDate;
   $("btnCsvAll").onclick = exportCsvAllDates;
@@ -945,7 +957,9 @@ function renderDetailEmpty(){
   `;
 }
 
-function renderDetailForSelectedDate(){
+async function renderDetailForSelectedDate(){
+  const sb = getSB();
+
   const fecha = $("datePick").value || "";
   if(!fecha){
     renderDetailEmpty();
@@ -961,19 +975,49 @@ function renderDetailForSelectedDate(){
   const map = STATE.attendanceByDate.get(fecha) || new Map();
 
   const dt = $("detailTable");
+
+  // ✅ header 6 columnas
   dt.innerHTML = `
     <div class="tr th">
-      <div>Empleado</div><div>Documento</div><div>Asistió</div><div>Obs.</div>
+      <div>Empleado</div><div>Documento</div><div>Asistió</div><div>Obs.</div><div>Incap.</div><div>Regresa</div>
     </div>
   `;
 
   if(!cited.length){
     dt.innerHTML += `
-      <div class="tr"><div class="small">No hay citados.</div><div></div><div></div><div></div><div></div></div>
+      <div class="tr">
+        <div class="small">No hay citados.</div>
+        <div></div><div></div><div></div><div></div><div></div>
+      </div>
     `;
     return;
   }
 
+  // ✅ 1) sacar employee_ids citados
+  const empIds = cited.map(c => c.employee_id).filter(Boolean);
+
+  // ✅ 2) consultar incapacidades activas EN ESA FECHA
+  let incMap = new Map(); // employee_id -> hasta (máxima)
+  if(empIds.length){
+    const { data: incRows, error: eInc } = await sb
+      .from("employee_incapacities")
+      .select("employee_id, desde, hasta")
+      .in("employee_id", empIds)
+      .lte("desde", fecha)
+      .gte("hasta", fecha);
+
+    if(eInc){
+      // si hay RLS o error, lo mostramos
+      $("rightMsg").innerHTML = `<span class="err">Error leyendo incapacidades:</span> ${esc(eInc.message)}`;
+    }else{
+      for(const r of (incRows || [])){
+        const prev = incMap.get(r.employee_id);
+        if(!prev || String(r.hasta) > String(prev)) incMap.set(r.employee_id, r.hasta);
+      }
+    }
+  }
+
+  // ✅ ordenar por nombre
   const sorted = [...cited].sort((a,b)=>{
     const na = (a.employees?.nombre || "").toLowerCase();
     const nb = (b.employees?.nombre || "").toLowerCase();
@@ -981,25 +1025,32 @@ function renderDetailForSelectedDate(){
   });
 
   for(const c of sorted){
-  const emp = c.employees || {};
-  const rec = map.get(c.employee_id) || null;
+    const emp = c.employees || {};
+    const rec = map.get(c.employee_id) || null;
 
-  const asistio = rec ? rec.asistio : null;
-  const estado  = rec ? (rec.estado || "") : ""; // "tarde" si aplica
+    const asistio = rec ? rec.asistio : null;
+    const estado  = rec ? (rec.estado || "") : ""; // "tarde" si aplica
 
-  const asistioTxt = (asistio === true) ? "Sí" : (asistio === false) ? "No" : "—";
-  const obsTxt = (estado === "tarde") ? "Tarde" : "";
+    const asistioTxt = (asistio === true) ? "Sí" : (asistio === false) ? "No" : "—";
+    const obsTxt = (estado === "tarde") ? "Tarde" : "";
 
-  dt.innerHTML += `
-    <div class="tr">
-      <div>${esc(emp.nombre || "")}</div>
-      <div>${esc(emp.documento || "")}</div>
-      <div class="${asistio === true ? "ok" : asistio === false ? "warn" : ""}">${esc(asistioTxt)}</div>
-      <div class="small">${esc(obsTxt)}</div>
-    </div>
-  `;
-}
+    // ✅ incapacidad
+    const incHasta = incMap.get(c.employee_id) || null;
+    const tieneIncap = !!incHasta;
+    const regresa = incHasta ? addDaysISO(incHasta, 1) : "";
+
+    dt.innerHTML += `
+      <div class="tr">
+        <div>${esc(emp.nombre || "")}</div>
+        <div>${esc(emp.documento || "")}</div>
+        <div class="${asistio === true ? "ok" : asistio === false ? "warn" : ""}">${esc(asistioTxt)}</div>
+        <div class="small">${esc(obsTxt)}</div>
+        <div class="${tieneIncap ? "warn" : "small"}">${tieneIncap ? `INCAP. ${esc(incHasta)}` : "—"}</div>
+        <div class="${tieneIncap ? "ok" : "small"}">${tieneIncap ? esc(regresa) : "—"}</div>
+      </div>
+    `;
   }
+}
 
 /* =======================
    HISTORIAL COLABORADOR
@@ -1254,6 +1305,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
