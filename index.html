@@ -2451,17 +2451,19 @@ async function trainerLoadCitadosInto(session_id){
       .select("employee_id, exit_date, motivo")
       .eq("session_id", session_id)
       .in("employee_id", empIds);
-      const { data: wds, error: eW } = await sb
+   const { data: wds, error: eW } = await sb
   .from("session_withdrawals")
-  .select("employee_id, withdrawal_date, motivo")
+  .select("employee_id, retiro_date, motivo")
   .eq("session_id", session_id)
   .in("employee_id", empIds);
+
 
 if(eW) throw eW;
 
 const wdMap = new Map(
-  (wds || []).map(x => [x.employee_id, { withdrawal_date: x.withdrawal_date, motivo: x.motivo }])
+  (wds || []).map(x => [x.employee_id, { retiro_date: x.retiro_date, motivo: x.motivo }])
 );
+
 
     if(eX) throw eX;
 
@@ -2546,7 +2548,8 @@ const exitDate = ex?.exit_date || null;
 const yaEntregadoHoy = exitDate && String(fechaSeleccionada) >= String(exitDate);
 
 const wd = wdMap.get(c.employee_id) || null;
-const wdDate = wd?.withdrawal_date || null;
+const wdDate = wd?.retiro_date || null;
+
 
 const yaRetiradoHoy = wdDate && String(fechaSeleccionada) >= String(wdDate);
 
@@ -2763,7 +2766,7 @@ window.trainerUndoHandOver = async (session_id, employee_id) => {
     setLog(e);
   }
 };
-  window.trainerWithdraw = async (session_id, employee_id, withdrawal_date) => {
+ window.trainerWithdraw = async (session_id, employee_id, retiro_date) => {
   const sb = getSB();
   try{
     const motivo = prompt("Motivo de retiro (opcional):", "Retirado") || null;
@@ -2771,7 +2774,7 @@ window.trainerUndoHandOver = async (session_id, employee_id) => {
     const payload = {
       session_id,
       employee_id,
-      withdrawal_date,   // fecha desde la cual queda RETIRADO
+      retiro_date,   // ✅ mismo nombre que la columna
       motivo
     };
 
@@ -2780,20 +2783,19 @@ window.trainerUndoHandOver = async (session_id, employee_id) => {
     let r = await sb
       .from("session_withdrawals")
       .upsert(payload, { onConflict: "session_id,employee_id" })
-      .select("id,session_id,employee_id,withdrawal_date,motivo")
+      .select("id,session_id,employee_id,retiro_date,motivo")
       .single();
 
-    // fallback si no existe unique
     if(r.error && String(r.error.message || "").toLowerCase().includes("on conflict")){
       r = await sb
         .from("session_withdrawals")
         .insert(payload)
-        .select("id,session_id,employee_id,withdrawal_date,motivo")
+        .select("id,session_id,employee_id,retiro_date,motivo")
         .single();
     }
     if(r.error) throw r.error;
 
-    setStatus(`<span class="ok">RETIRADO.</span> Desde: <code>${esc(withdrawal_date)}</code>`);
+    setStatus(`<span class="ok">RETIRADO.</span> Desde: <code>${esc(retiro_date)}</code>`);
     setLog({ withdrawal_saved: r.data });
 
     await trainerLoadCitadosInto(session_id);
@@ -2939,8 +2941,19 @@ window.trainerExportSessionCSV = async (session_id) => {
     }
 
     const empIds = cit.map(c => c.employee_id).filter(Boolean);
-    // 3.5) ENTREGADOS / RETIROS (session_exits) para exportación
-const { data: exits, error: eX } = await sb
+ 
+const { data: wds, error: eW } = await sb
+  .from("session_withdrawals")
+  .select("employee_id, retiro_date")
+  .eq("session_id", session_id)
+  .in("employee_id", empIds);
+
+if(eW) throw eW;
+
+const wdMap = new Map((wds || []).map(x => [x.employee_id, x.retiro_date]));
+
+
+const { data: exs, error: eX } = await sb
   .from("session_exits")
   .select("employee_id, exit_date")
   .eq("session_id", session_id)
@@ -2948,7 +2961,7 @@ const { data: exits, error: eX } = await sb
 
 if(eX) throw eX;
 
-const exitMap = new Map((exits || []).map(x => [x.employee_id, x.exit_date]));
+const exitMap = new Map((exs || []).map(x => [x.employee_id, x.exit_date]));
 
 
     // 4) Asistencias de todas las fechas (y tema)
@@ -2980,10 +2993,16 @@ const exitMap = new Map((exits || []).map(x => [x.employee_id, x.exit_date]));
     for(const f of allFechas){
       for(const c of cit){
         const emp = c.employees || {};
-        const exitDate = exitMap.get(c.employee_id) || null;
-        if(exitDate && String(f) >= String(exitDate)){
-        continue; 
-        }
+       const exitDate = exitMap.get(c.employee_id) || null;
+if(exitDate && String(f) >= String(exitDate)){
+  continue;
+}
+
+const wdDate = wdMap.get(c.employee_id) || null;
+if(wdDate && String(f) >= String(wdDate)){
+  continue;
+}
+
         const doc = (emp.documento ?? "").toString().replaceAll('"','""');
         const nom = (emp.nombre ?? "").toString().replaceAll('"','""');
 
@@ -3029,6 +3048,7 @@ const exitMap = new Map((exits || []).map(x => [x.employee_id, x.exit_date]));
 
 </body>
 </html>
+
 
 
 
