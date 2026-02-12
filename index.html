@@ -143,6 +143,10 @@ pre{
   border-bottom:1px solid rgba(167,139,250,.18);
 }
 .tablelike .tr:last-child{border-bottom:0;}
+  .tablelike .tr > div{
+  display:flex;
+  align-items:center;
+}
 .tablelike .th{
   background:rgba(5,6,23,.45);
   color:var(--muted);
@@ -1689,9 +1693,6 @@ if (r.error && String(r.error.message || "").toLowerCase().includes("on conflict
 }
 if (r.error) throw r.error;
 
-
-    if(r.error) throw r.error;
-
     msg.innerHTML = `<span class="ok">Incapacidad registrada.</span> ${esc(emp.nombre || "")} · ${esc(documento)} (${esc(desde)} → ${esc(hasta)})`;
     setStatus(`<span class="ok">Incapacidad guardada.</span>`);
     setLog({ incapacidad_saved: r.data, empleado: emp });
@@ -2439,39 +2440,51 @@ async function trainerLoadCitadosInto(session_id){
 
     if(error) throw error;
 
-    if(!cit?.length){
-      table.insertAdjacentHTML("beforeend", `<div class="tr"><div class="small">No hay citados.</div><div></div><div></div><div></div></div>`);
-      return;
-    }
+   if(!cit?.length){
+  table.insertAdjacentHTML("beforeend", `
+    <div class="tr">
+      <div class="small"><span class="warn">No hay citados en esta sesión.</span></div>
+      <div></div><div></div><div></div>
+    </div>
+  `);
+  return;
+}
+    // ===============================
+// EMPLOYEE IDS
+// ===============================
+const empIds = (cit || []).map(c => c.employee_id).filter(Boolean);
 
-    const empIds = cit.map(c => c.employee_id);
-    // 2.6) ENTREGADOS / RETIROS (session_exits)
-    const { data: exits, error: eX } = await sb
-      .from("session_exits")
-      .select("employee_id, exit_date, motivo")
-      .eq("session_id", session_id)
-      .in("employee_id", empIds);
-   const { data: wds, error: eW } = await sb
-  .from("session_withdrawals")
-  .select("employee_id, retiro_date, motivo")
+// ===============================
+// ENTREGADOS (session_exits)
+// ===============================
+const { data: exs, error: eX } = await sb
+  .from("session_exits")
+  .select("employee_id, exit_date")
   .eq("session_id", session_id)
   .in("employee_id", empIds);
 
+if(eX) throw eX;
+
+// Map: employee_id -> exit_date (string YYYY-MM-DD)
+const exitMap = new Map((exs || []).map(x => [x.employee_id, x.exit_date]));
+
+// ===============================
+// RETIRADOS (session_withdrawals)
+// ===============================
+const { data: wds, error: eW } = await sb
+  .from("session_withdrawals")
+  .select("employee_id, retiro_date")
+  .eq("session_id", session_id)
+  .in("employee_id", empIds);
 
 if(eW) throw eW;
 
-const wdMap = new Map(
-  (wds || []).map(x => [x.employee_id, { retiro_date: x.retiro_date, motivo: x.motivo }])
-);
+// Map: employee_id -> retiro_date (string YYYY-MM-DD)
+const wdMap = new Map((wds || []).map(x => [x.employee_id, x.retiro_date]));
 
 
-    if(eX) throw eX;
 
-    const exitMap = new Map(
-      (exits || []).map(x => [x.employee_id, { exit_date: x.exit_date, motivo: x.motivo }])
-    );
 
-    // 2) Asistencia SOLO para la fecha seleccionada (incluye tarde)
     const { data: at, error: e2 } = await sb
       .from("attendance_dates")
       .select("employee_id, asistio, tarde, tema")
@@ -2536,22 +2549,17 @@ const wdMap = new Map(
       }
     }
 
-    // 5) Pintar filas
-    // 5) Pintar filas
+
 for(const c of cit){
   const emp = c.employees;
 
   // ✅ Si está entregado/retirado desde una fecha <= fecha seleccionada, no se muestra
- const ex = exitMap.get(c.employee_id) || null;
-const exitDate = ex?.exit_date || null;
-
+ const exitDate = exitMap.get(c.employee_id) || null;
 const yaEntregadoHoy = exitDate && String(fechaSeleccionada) >= String(exitDate);
 
-const wd = wdMap.get(c.employee_id) || null;
-const wdDate = wd?.retiro_date || null;
-
-
+const wdDate = wdMap.get(c.employee_id) || null;
 const yaRetiradoHoy = wdDate && String(fechaSeleccionada) >= String(wdDate);
+
 
 
 
@@ -2575,70 +2583,76 @@ const yaRetiradoHoy = wdDate && String(fechaSeleccionada) >= String(wdDate);
     : `0/0`;
 
   table.insertAdjacentHTML("beforeend", `
-    <div class="tr">
+  <div class="tr">
+
+    <!-- Columna EMPLEADO -->
+    <div>
       <div class="small">
-  ${esc(name)}
+        ${esc(name)}
 
-  <div class="small" style="margin-top:4px;opacity:.9;">
-    <span class="${apto ? "ok":"warn"}">${esc(prog)}</span>
-    ${late ? `<span class="warn"> · TARDE</span>` : ``}
-    ${tieneIncap ? `<span class="warn"> · INCAP.</span> <span class="small">${esc(incHasta)}</span>` : ``}
-    ${regresa ? `<span class="ok"> · REGRESA: ${esc(regresa)}</span>` : ``}
-  </div>
+        <div class="small" style="margin-top:4px;opacity:.9;">
+          <span class="${apto ? "ok":"warn"}">${esc(prog)}</span>
+          ${late ? `<span class="warn"> · TARDE</span>` : ``}
+          ${tieneIncap ? `<span class="warn"> · INCAP.</span> <span class="small">${esc(incHasta)}</span>` : ``}
+          ${regresa ? `<span class="ok"> · REGRESA: ${esc(regresa)}</span>` : ``}
+        </div>
 
-  <!-- ✅ BOTÓN ENTREGAR -->
- <div class="actions" style="margin-top:8px;">
-  ${
-    yaEntregadoHoy
-    ? `<button class="btnMini btnDanger"
-         onclick="trainerUndoHandOver('${session_id}','${c.employee_id}')">
-         Quitar entrega
-       </button>
-       <span class="small">Entregado desde ${esc(exitDate)}</span>`
-    : `<button class="btnMini btnGhost"
-         onclick="trainerHandOver('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}')">
-         Entregar a operación
-       </button>`
-  }
+        <!-- Acciones debajo -->
+        <div class="actions" style="margin-top:8px;">
+          ${
+            yaEntregadoHoy
+            ? `<button class="btnMini btnDanger"
+                 onclick="trainerUndoHandOver('${session_id}','${c.employee_id}')">
+                 Quitar entrega
+               </button>
+               <span class="small">Entregado desde ${esc(exitDate)}</span>`
+            : `<button class="btnMini btnGhost"
+                 onclick="trainerHandOver('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}')">
+                 Entregar a operación
+               </button>`
+          }
 
-  ${
-    yaRetiradoHoy
-    ? `<button class="btnMini btnDanger"
-         onclick="trainerUndoWithdraw('${session_id}','${c.employee_id}')">
-         Quitar retirado
-       </button>
-       <span class="small">Retirado desde ${esc(wdDate)}</span>`
-    : `<button class="btnMini btnGhost"
-         onclick="trainerWithdraw('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}')">
-         Retirado
-       </button>`
-  }
-</div>
+          ${
+            yaRetiradoHoy
+            ? `<button class="btnMini btnDanger"
+                 onclick="trainerUndoWithdraw('${session_id}','${c.employee_id}')">
+                 Quitar retirado
+               </button>
+               <span class="small">Retirado desde ${esc(wdDate)}</span>`
+            : `<button class="btnMini btnGhost"
+                 onclick="trainerWithdraw('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}')">
+                 Retirado
+               </button>`
+          }
+        </div>
 
-
-  </div>
-</div>
-
-
-      <div>
-        <button class="btnMini btnOk" type="button"
-          onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',true,false)"
-          ${asistio === true && !late ? 'disabled' : ''}>Sí</button>
-      </div>
-
-      <div>
-        <button class="btnMini btnBad" type="button"
-          onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',false,false)"
-          ${asistio === false ? 'disabled' : ''}>No</button>
-      </div>
-
-      <div>
-        <button class="btnMini btnGhost" type="button"
-          onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',true,true)"
-          ${late ? 'disabled' : ''}>Tarde</button>
       </div>
     </div>
-  `);
+
+    <!-- Columna SÍ -->
+    <div>
+      <button class="btnMini btnOk" type="button"
+        onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',true,false)"
+        ${asistio === true && !late ? 'disabled' : ''}>Sí</button>
+    </div>
+
+    <!-- Columna NO -->
+    <div>
+      <button class="btnMini btnBad" type="button"
+        onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',false,false)"
+        ${asistio === false ? 'disabled' : ''}>No</button>
+    </div>
+
+    <!-- Columna TARDE -->
+    <div>
+      <button class="btnMini btnGhost" type="button"
+        onclick="trainerMark('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}',true,true)"
+        ${late ? 'disabled' : ''}>Tarde</button>
+    </div>
+
+  </div>
+`);
+
 }
 
   }catch(err){
@@ -3048,6 +3062,7 @@ if(wdDate && String(f) >= String(wdDate)){
 
 </body>
 </html>
+
 
 
 
