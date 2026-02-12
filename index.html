@@ -2451,6 +2451,17 @@ async function trainerLoadCitadosInto(session_id){
       .select("employee_id, exit_date, motivo")
       .eq("session_id", session_id)
       .in("employee_id", empIds);
+      const { data: wds, error: eW } = await sb
+  .from("session_withdrawals")
+  .select("employee_id, withdrawal_date, motivo")
+  .eq("session_id", session_id)
+  .in("employee_id", empIds);
+
+if(eW) throw eW;
+
+const wdMap = new Map(
+  (wds || []).map(x => [x.employee_id, { withdrawal_date: x.withdrawal_date, motivo: x.motivo }])
+);
 
     if(eX) throw eX;
 
@@ -2534,6 +2545,10 @@ const exitDate = ex?.exit_date || null;
 
 const yaEntregadoHoy = exitDate && String(fechaSeleccionada) >= String(exitDate);
 
+const wd = wdMap.get(c.employee_id) || null;
+const wdDate = wd?.withdrawal_date || null;
+
+const yaRetiradoHoy = wdDate && String(fechaSeleccionada) >= String(wdDate);
 
 
 
@@ -2569,19 +2584,34 @@ const yaEntregadoHoy = exitDate && String(fechaSeleccionada) >= String(exitDate)
   </div>
 
   <!-- ✅ BOTÓN ENTREGAR -->
-  <div class="actions" style="margin-top:8px;">
-    ${
-  yaEntregadoHoy
-  ? `<button class="btnMini btnDanger"
-       onclick="trainerUndoHandOver('${session_id}','${c.employee_id}')">
-       Quitar entrega
-     </button>
-     <span class="small">Entregado desde ${esc(exitDate)}</span>`
-  : `<button class="btnMini btnGhost"
-       onclick="trainerHandOver('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}')">
-       Entregar a operación
-     </button>`
-}
+ <div class="actions" style="margin-top:8px;">
+  ${
+    yaEntregadoHoy
+    ? `<button class="btnMini btnDanger"
+         onclick="trainerUndoHandOver('${session_id}','${c.employee_id}')">
+         Quitar entrega
+       </button>
+       <span class="small">Entregado desde ${esc(exitDate)}</span>`
+    : `<button class="btnMini btnGhost"
+         onclick="trainerHandOver('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}')">
+         Entregar a operación
+       </button>`
+  }
+
+  ${
+    yaRetiradoHoy
+    ? `<button class="btnMini btnDanger"
+         onclick="trainerUndoWithdraw('${session_id}','${c.employee_id}')">
+         Quitar retirado
+       </button>
+       <span class="small">Retirado desde ${esc(wdDate)}</span>`
+    : `<button class="btnMini btnGhost"
+         onclick="trainerWithdraw('${session_id}','${c.employee_id}','${esc(fechaSeleccionada)}')">
+         Retirado
+       </button>`
+  }
+</div>
+
 
   </div>
 </div>
@@ -2733,6 +2763,70 @@ window.trainerUndoHandOver = async (session_id, employee_id) => {
     setLog(e);
   }
 };
+  window.trainerWithdraw = async (session_id, employee_id, withdrawal_date) => {
+  const sb = getSB();
+  try{
+    const motivo = prompt("Motivo de retiro (opcional):", "Retirado") || null;
+
+    const payload = {
+      session_id,
+      employee_id,
+      withdrawal_date,   // fecha desde la cual queda RETIRADO
+      motivo
+    };
+
+    setStatus("Guardando RETIRO...");
+
+    let r = await sb
+      .from("session_withdrawals")
+      .upsert(payload, { onConflict: "session_id,employee_id" })
+      .select("id,session_id,employee_id,withdrawal_date,motivo")
+      .single();
+
+    // fallback si no existe unique
+    if(r.error && String(r.error.message || "").toLowerCase().includes("on conflict")){
+      r = await sb
+        .from("session_withdrawals")
+        .insert(payload)
+        .select("id,session_id,employee_id,withdrawal_date,motivo")
+        .single();
+    }
+    if(r.error) throw r.error;
+
+    setStatus(`<span class="ok">RETIRADO.</span> Desde: <code>${esc(withdrawal_date)}</code>`);
+    setLog({ withdrawal_saved: r.data });
+
+    await trainerLoadCitadosInto(session_id);
+  }catch(e){
+    setStatus(`<span class="err">Error retirando:</span> ${esc(e.message || e)}`);
+    setLog(e);
+  }
+};
+
+window.trainerUndoWithdraw = async (session_id, employee_id) => {
+  const sb = getSB();
+  if(!confirm("¿Quitar RETIRADO y volver a mostrar a esta persona?")) return;
+
+  try{
+    setStatus("Quitando RETIRO...");
+    const { error } = await sb
+      .from("session_withdrawals")
+      .delete()
+      .eq("session_id", session_id)
+      .eq("employee_id", employee_id);
+
+    if(error) throw error;
+
+    setStatus(`<span class="ok">Retiro revertido.</span>`);
+    setLog({ withdrawal_deleted: { session_id, employee_id } });
+
+    await trainerLoadCitadosInto(session_id);
+  }catch(e){
+    setStatus(`<span class="err">Error revirtiendo retiro:</span> ${esc(e.message || e)}`);
+    setLog(e);
+  }
+};
+
 /* =========================================================
    INIT
 ========================================================= */
@@ -2935,6 +3029,7 @@ const exitMap = new Map((exits || []).map(x => [x.employee_id, x.exit_date]));
 
 </body>
 </html>
+
 
 
 
