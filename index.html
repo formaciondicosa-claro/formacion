@@ -1471,19 +1471,28 @@ window.adminAddDay = async (session_id) => {
   const temaEl = document.getElementById(`addTema_${session_id}`);
   const msgEl  = document.getElementById(`addMsg_${session_id}`);
 
-  const fecha = (dateEl?.value || "").trim();
+  let fechaRaw = (dateEl?.value || "").trim();
   const tema  = (temaEl?.value || "").trim();
 
   if(msgEl) msgEl.innerHTML = "";
-  if(!fecha){
+
+  if(!fechaRaw){
     if(msgEl) msgEl.innerHTML = `<span class="warn">Debes seleccionar una fecha.</span>`;
+    return;
+  }
+
+  // ✅ NORMALIZAR A ISO
+  const fechaISO = parseDateToISO(fechaRaw);
+
+  if(!fechaISO){
+    if(msgEl) msgEl.innerHTML = `<span class="err">Fecha inválida.</span>`;
     return;
   }
 
   try{
     setStatus("Validando fechas actuales...");
 
-    // 1) leer fechas existentes de esa sesión
+    // 1) traer fechas existentes
     const { data: existing, error: e1 } = await sb
       .from("session_dates")
       .select("fecha")
@@ -1491,20 +1500,49 @@ window.adminAddDay = async (session_id) => {
 
     if(e1) throw e1;
 
-    const exists = (existing || []).some(r => String(r.fecha) === String(fecha));
-    if(exists){
+    // 2) normalizar existentes
+    const set = new Set(
+      (existing || []).map(r => String(r.fecha).slice(0,10))
+    );
+
+    // 3) validar duplicado REAL
+    if(set.has(fechaISO)){
       if(msgEl) msgEl.innerHTML = `<span class="warn">Esa fecha ya existe en la sesión.</span>`;
       return;
     }
 
     setStatus("Guardando nuevo día...");
 
-    // 2) insertar nueva fecha
+    // 4) insertar
     const payload = {
-      session_id: session_id,
-      fecha: fecha,
+      session_id,
+      fecha: fechaISO,
       tema_visto: tema || null
     };
+
+    const { error: e2 } = await sb
+      .from("session_dates")
+      .insert([payload]);
+
+    if(e2) throw e2;
+
+    if(msgEl) msgEl.innerHTML = `<span class="ok">Día agregado: ${esc(fechaISO)}</span>`;
+    setStatus(`<span class="ok">Día agregado.</span>`);
+
+    // limpiar
+    if(dateEl) dateEl.value = "";
+    if(temaEl) temaEl.value = "";
+
+    // refrescar panel
+    await adminLoadSessions();
+
+  }catch(e){
+    if(msgEl) msgEl.innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
+    setStatus(`<span class="err">No se pudo agregar día.</span>`);
+    setLog(e);
+  }
+};
+
 
     const { error: e2 } = await sb
       .from("session_dates")
@@ -3062,6 +3100,7 @@ if(wdDate && String(f) >= String(wdDate)){
 
 </body>
 </html>
+
 
 
 
