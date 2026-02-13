@@ -1016,6 +1016,52 @@ async function renderDetailForSelectedDate(){
       }
     }
   }
+    // ✅ 3) ENTREGADO / RETIRADO (prioridad sobre asistencia)
+  // Ajusta los nombres de tabla/columna si en tu BD se llaman distinto.
+  let exitMap = new Map();      // employee_id -> exit_date (última <= fecha)
+  let retiroMap = new Map();    // employee_id -> retiro_date (última <= fecha)
+
+  if(empIds.length){
+    // --- ENTREGADO a operación ---
+    {
+      const { data: exits, error: eEx } = await sb
+        .from("session_exits")
+        .select("employee_id, exit_date")
+        .in("employee_id", empIds)
+        .eq("session_id", STATE.selectedSessionId)
+        .lte("exit_date", fecha);
+
+      if(eEx){
+        $("rightMsg").innerHTML = `<span class="err">Error leyendo entregas:</span> ${esc(eEx.message)}`;
+      } else {
+        for(const r of (exits || [])){
+          const prev = exitMap.get(r.employee_id);
+          // nos quedamos con la fecha más grande (más reciente)
+          if(!prev || String(r.exit_date) > String(prev)) exitMap.set(r.employee_id, r.exit_date);
+        }
+      }
+    }
+
+    // --- RETIRADO ---
+    {
+      const { data: rets, error: eRe } = await sb
+        .from("session_withdrawals")
+        .select("employee_id, retiro_date")
+        .in("employee_id", empIds)
+        .eq("session_id", STATE.selectedSessionId)
+        .lte("retiro_date", fecha);
+
+      if(eRe){
+        $("rightMsg").innerHTML = `<span class="err">Error leyendo retiros:</span> ${esc(eRe.message)}`;
+      } else {
+        for(const r of (rets || [])){
+          const prev = retiroMap.get(r.employee_id);
+          if(!prev || String(r.retiro_date) > String(prev)) retiroMap.set(r.employee_id, r.retiro_date);
+        }
+      }
+    }
+  }
+
 
   // ✅ ordenar por nombre
   const sorted = [...cited].sort((a,b)=>{
@@ -1031,19 +1077,44 @@ async function renderDetailForSelectedDate(){
     const asistio = rec ? rec.asistio : null;
     const estado  = rec ? (rec.estado || "") : ""; // "tarde" si aplica
 
-    const asistioTxt = (asistio === true) ? "Sí" : (asistio === false) ? "No" : "—";
-const obsTxt = (estado === "tarde") ? "Tarde" : "";
+      // ✅ prioridad: RETIRADO > ENTREGADO > INCAP > asistencia normal
+    const retiroFecha = retiroMap.get(c.employee_id) || null;
+    const exitFecha = exitMap.get(c.employee_id) || null;
+
+    let asistioTxt = (asistio === true) ? "Sí" : (asistio === false) ? "No" : "—";
+    let obsTxt = (estado === "tarde") ? "Tarde" : "";
+
+    if(retiroFecha){
+      asistioTxt = `RETIRADO (${retiroFecha})`;
+      obsTxt = "Retiro (abandono)";
+    } else if(exitFecha){
+      asistioTxt = `ENTREGADO (${exitFecha})`;
+      obsTxt = "Entregado a operación";
+    }
+
 
 // ✅ incapacidad (primero definimos)
 const incHasta = incMap.get(c.employee_id) || null;
 const tieneIncap = !!incHasta;
 const regresa = incHasta ? addDaysISO(incHasta, 1) : "";
 
-// ✅ si está en incapacidad, “Asistió” debe mostrar INCAP
-const asistioTxtFinal = tieneIncap ? "INCAP" : asistioTxt;
-const asistClass = tieneIncap
-  ? "warn"
-  : (asistio === true ? "ok" : asistio === false ? "warn" : "");
+
+
+let asistioTxtFinal = asistioTxt;
+let asistClass = (asistio === true ? "ok" : asistio === false ? "warn" : "");
+
+// prioridad de estilos
+if(retiroFecha){
+  asistioTxtFinal = `RETIRADO (${retiroFecha})`;
+  asistClass = "err";
+} else if(exitFecha){
+  asistioTxtFinal = `ENTREGADO (${exitFecha})`;
+  asistClass = "info";
+} else if(tieneIncap){
+  asistioTxtFinal = "INCAP";
+  asistClass = "warn";
+}
+
 
 
     dt.innerHTML += `
@@ -1312,6 +1383,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
