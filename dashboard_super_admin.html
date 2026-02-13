@@ -805,16 +805,42 @@ renderSessionsList();
   }
 };
 
+  function normDate(x){
+  // deja solo YYYY-MM-DD por si viene con hora
+  return (x ? String(x).slice(0,10) : "");
+}
+
 async function loadSessionDates(session_id){
   const sb = getSB();
   const { data, error } = await sb
     .from("session_dates")
-    .select("fecha, tema_visto")   /* ✅ ahora trae tema_visto */
+    .select("fecha, tema_visto")
     .eq("session_id", session_id)
     .order("fecha", { ascending:true });
+
   if(error) throw error;
-  STATE.sessionDates = (data || []).filter(x => x.fecha);
+
+  // 1) cargar las fechas de session_dates
+  let dates = (data || [])
+    .filter(x => x?.fecha)
+    .map(x => ({ fecha: normDate(x.fecha), tema_visto: x.tema_visto ?? null }));
+
+  // 2) incluir la fecha principal de la sesión (sessions.fecha) si no está ya
+  const mainFecha = normDate(STATE.selectedSession?.fecha);
+  if(mainFecha && !dates.some(d => d.fecha === mainFecha)){
+    dates.push({ fecha: mainFecha, tema_visto: null });
+  }
+
+  // 3) ordenar y quitar duplicados por seguridad
+  dates.sort((a,b)=> String(a.fecha).localeCompare(String(b.fecha)));
+  const seen = new Set();
+  STATE.sessionDates = dates.filter(d => {
+    if(seen.has(d.fecha)) return false;
+    seen.add(d.fecha);
+    return true;
+  });
 }
+
 
 async function loadCitations(session_id){
   const sb = getSB();
@@ -1599,6 +1625,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
