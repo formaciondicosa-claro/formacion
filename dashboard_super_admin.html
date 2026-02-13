@@ -760,11 +760,12 @@ window.selectSession = async (session_id) => {
       loadSessionDates(session_id),
       loadCitations(session_id),
     ]);
-    await loadAttendanceForAllDates(session_id);
+   await loadAttendanceForAllDates(session_id);
 
-    renderSessionDetail();
-    setPill("Listo", "ok");
-    renderSessionsList();
+renderSessionDetail();
+setPill("Listo", "ok");
+renderSessionsList();
+
   }catch(e){
     $("sessionMeta").innerHTML = `<span class="err">Error:</span> ${esc(e.message || e)}`;
     setPill("Error", "err");
@@ -862,9 +863,45 @@ async function loadAttendanceForAllDates(session_id){
 function getTemaForFecha(fecha){
   return (STATE.temaByDate.get(fecha) || "").toString();
 }
+// ✅ Trae mapas de ENTREGADO y RETIRADO para esta sesión
+async function loadExitAndRetiroMaps(session_id){
+  const sb = getSB();
+
+  // --- ENTREGADOS ---
+  const { data: exits, error: eEx } = await sb
+    .from("session_exits")
+    .select("employee_id, exit_date")
+    .eq("session_id", session_id);
+
+  if(eEx) throw eEx;
+
+  // --- RETIRADOS ---
+  const { data: rets, error: eRe } = await sb
+    .from("session_withdrawals")
+    .select("employee_id, retiro_date")
+    .eq("session_id", session_id);
+
+  if(eRe) throw eRe;
+
+  // Mapas: employee_id -> fecha más reciente
+  const exitMap = new Map();
+  for(const r of (exits || [])){
+    const prev = exitMap.get(r.employee_id);
+    if(!prev || String(r.exit_date) > String(prev)) exitMap.set(r.employee_id, r.exit_date);
+  }
+
+  const retiroMap = new Map();
+  for(const r of (rets || [])){
+    const prev = retiroMap.get(r.employee_id);
+    if(!prev || String(r.retiro_date) > String(prev)) retiroMap.set(r.employee_id, r.retiro_date);
+  }
+
+  return { exitMap, retiroMap };
+}
 
 
-function renderSessionDetail(){
+async function renderSessionDetail(){
+
   const s = STATE.selectedSession;
   if(!s){
     $("sessionMeta").textContent = "Selecciona una sesión.";
@@ -881,33 +918,55 @@ function renderSessionDetail(){
     </div>
   `;
 
-  const citedTotal = STATE.citations.length;
-  const datesTotal = STATE.sessionDates.length;
+ const citedTotal = STATE.citations.length;
+const datesTotal = STATE.sessionDates.length;
 
-  const rows = [];
-  let sumYes = 0;
-  let sumPct = 0;
+const rows = [];
+let sumYes = 0;
+let sumPct = 0;
 
-  for(const d of STATE.sessionDates){
-    const fecha = d.fecha;
+const { exitMap, retiroMap } = await loadExitAndRetiroMaps(STATE.selectedSessionId);
+
+for(const d of STATE.sessionDates){
+  const fecha = d.fecha;
+
     const map = STATE.attendanceByDate.get(fecha) || new Map();
 
-    let yes = 0;
-    for(const c of STATE.citations){
-      const rec = map.get(c.employee_id);
-      if(rec && rec.asistio === true) yes++;
-    }
+ 
+const activeCited = STATE.citations.filter(c => {
+  const empId = c.employee_id;
 
-    const no = citedTotal - yes;
-    const pct = citedTotal ? (yes / citedTotal) * 100 : 0;
+  const retiro = retiroMap.get(empId) || null;
+  const exit   = exitMap.get(empId) || null;
+
+  // ✅ desde el día siguiente: si fue ANTES de la fecha, ya no cuenta
+  if(retiro && String(retiro) < String(fecha)) return false;
+  if(exit && String(exit) < String(fecha)) return false;
+
+  return true;
+});
+
+const citedEff = activeCited.length;
+
+let yes = 0;
+for(const c of activeCited){
+  const rec = map.get(c.employee_id);
+  if(rec && rec.asistio === true) yes++;
+}
+
+const no = citedEff - yes;
+const pct = citedEff ? (yes / citedEff) * 100 : 0;
+
 
     sumYes += yes;
     sumPct += pct;
 
-   rows.push({ fecha, cited: citedTotal, yes, no, pct, tema: getTemaForFecha(fecha) || "" });
+   rows.push({ fecha, cited: citedEff, yes, no, pct, tema: getTemaForFecha(fecha) || "" });
+
   }
 
-  const avgPct = datesTotal ? (sumPct / datesTotal) : 0;
+  const avgPct = rows.length ? (sumPct / rows.length) : 0;
+
 
   $("kCited").textContent = String(citedTotal);
   $("kCitedHint").textContent = citedTotal ? "Basado en citations" : "";
@@ -1383,6 +1442,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
