@@ -295,6 +295,34 @@ code{color:#fff;}
       <div>Días</div>
     </div>
   </div>
+<hr/>
+
+<h3>📦 Entregados a Operación (por cargo)</h3>
+<div class="small">Selecciona un rango de fechas y genera el reporte. (Tabla: <code>session_exits</code>)</div>
+
+<div class="row" style="margin-top:10px;">
+  <div class="col">
+    <label>Desde</label>
+    <input id="exFrom" type="date" />
+  </div>
+  <div class="col">
+    <label>Hasta</label>
+    <input id="exTo" type="date" />
+  </div>
+</div>
+
+<div class="row" style="margin-top:10px;">
+  <button id="btnExRun" class="btnMini btnGhost" type="button">Consultar</button>
+  <button id="btnExCsv" class="btnMini btnGhost" type="button" disabled>Exportar CSV</button>
+  <div class="small" id="exMsg" style="margin-left:auto;"></div>
+</div>
+
+<div class="tablelike" style="margin-top:10px;" id="exTable">
+  <div class="tr th" style="grid-template-columns: 1fr 160px;">
+    <div>Cargo</div>
+    <div>Total entregados</div>
+  </div>
+</div>
 
   <hr/>
 
@@ -451,6 +479,7 @@ let STATE = {
   attendanceByDate: new Map(),
   temaByDate: new Map(),
 };
+let EXITS_REPORT_ROWS = []; // guarda filas del reporte para exportar
 
 /* =======================
    AUTH / PROFILE
@@ -544,6 +573,10 @@ async function boot(){
   $("btnCsvAll").onclick = exportCsvAllDates;
 
   $("btnHistBuscar").onclick = buscarHistorialColaborador;
+  // Reporte entregados a operación
+$("btnExRun").onclick = runExitsReport;
+$("btnExCsv").onclick = exportExitsCsv;
+
   $("btnHistLimpiar").onclick = limpiarHistorialColaborador;
 
   await initData();
@@ -1348,6 +1381,130 @@ function limpiarHistorialColaborador(){
     </div>
   `;
 }
+/* =======================
+   REPORTE: ENTREGADOS A OPERACIÓN (POR CARGO)
+======================= */
+function renderExitsTable(rows){
+  const cont = $("exTable");
+  cont.innerHTML = `
+    <div class="tr th" style="grid-template-columns: 1fr 160px;">
+      <div>Cargo</div>
+      <div>Total entregados</div>
+    </div>
+  `;
+
+  if(!rows || !rows.length){
+    cont.innerHTML += `
+      <div class="tr" style="grid-template-columns: 1fr 160px;">
+        <div class="small">Sin registros en el rango.</div>
+        <div>0</div>
+      </div>
+    `;
+    return;
+  }
+
+  for(const r of rows){
+    cont.innerHTML += `
+      <div class="tr" style="grid-template-columns: 1fr 160px;">
+        <div>${esc(r.cargo || "(sin cargo)")}</div>
+        <div><b>${esc(r.total_entregados ?? 0)}</b></div>
+      </div>
+    `;
+  }
+}
+
+async function runExitsReport(){
+  const sb = getSB();
+  const from = $("exFrom").value || "";
+  const to = $("exTo").value || "";
+
+  $("exMsg").innerHTML = "";
+  $("btnExCsv").disabled = true;
+  EXITS_REPORT_ROWS = [];
+
+  if(!from || !to){
+    $("exMsg").innerHTML = `<span class="warn">Debes seleccionar Desde y Hasta.</span>`;
+    return;
+  }
+
+  setPill("Consultando entregados…", "info");
+  $("exMsg").innerHTML = `<span class="small">Consultando...</span>`;
+
+  try{
+    // 1) Traer exits por rango
+    const { data: exits, error: e1 } = await sb
+      .from("session_exits")
+      .select("employee_id, exit_date")
+      .gte("exit_date", from)
+      .lte("exit_date", to);
+
+    if(e1) throw e1;
+
+    if(!exits || !exits.length){
+      renderExitsTable([]);
+      $("exMsg").innerHTML = `<span class="ok">Listo:</span> 0 entregados en el rango.`;
+      setPill("Listo", "ok");
+      return;
+    }
+
+    // 2) Obtener cargos desde employees
+    const empIds = [...new Set(exits.map(x => x.employee_id).filter(Boolean))];
+
+    const { data: emps, error: e2 } = await sb
+      .from("employees")
+      .select("id,cargo")
+      .in("id", empIds);
+
+    if(e2) throw e2;
+
+    const cargoByEmp = new Map((emps || []).map(e => [e.id, (e.cargo || "").toString().trim()]));
+
+    // 3) Contar por cargo
+    const counts = new Map(); // cargo -> count
+    for(const x of exits){
+      const cargo = cargoByEmp.get(x.employee_id) || "(sin cargo)";
+      counts.set(cargo, (counts.get(cargo) || 0) + 1);
+    }
+
+    // 4) Convertir a array ordenado
+    const rows = [...counts.entries()]
+      .map(([cargo, total]) => ({ cargo, total_entregados: total }))
+      .sort((a,b)=> (b.total_entregados || 0) - (a.total_entregados || 0));
+
+    EXITS_REPORT_ROWS = rows;
+
+    renderExitsTable(rows);
+    $("btnExCsv").disabled = rows.length === 0;
+
+    $("exMsg").innerHTML = `<span class="ok">Listo:</span> ${exits.length} entregados (eventos) en el rango.`;
+    setPill("Listo", "ok");
+  }catch(e){
+    $("exMsg").innerHTML = `<span class="err">${esc(e.message || e)}</span>`;
+    setPill("Error", "err");
+  }
+}
+
+function exportExitsCsv(){
+  const from = $("exFrom").value || "";
+  const to = $("exTo").value || "";
+
+  if(!EXITS_REPORT_ROWS.length){
+    $("exMsg").innerHTML = `<span class="warn">Primero genera el reporte.</span>`;
+    return;
+  }
+
+  const header = ["cargo","total_entregados"];
+  const lines = [csvLine(header)];
+
+  for(const r of EXITS_REPORT_ROWS){
+    lines.push(csvLine([r.cargo || "", r.total_entregados ?? 0]));
+  }
+
+  const csv = lines.join("\n");
+  const name = `entregados_operacion_por_cargo_${from}_a_${to}.csv`;
+  downloadTextFile(csv, name, "text/csv;charset=utf-8");
+  $("exMsg").innerHTML = `<span class="ok">CSV generado:</span> ${esc(name)}`;
+}
 
 /* =======================
    EXPORT CSV
@@ -1442,6 +1599,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
+
 
 
 
