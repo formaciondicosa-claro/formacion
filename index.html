@@ -1465,45 +1465,6 @@ window.adminCloseAddDay = (session_id) => {
 };
 
 window.adminAddDay = async (session_id) => {
-  const sb = getSB();
-
-  const dateEl = document.getElementById(`addDate_${session_id}`);
-  const temaEl = document.getElementById(`addTema_${session_id}`);
-  const msgEl  = document.getElementById(`addMsg_${session_id}`);
-
-  let fechaRaw = (dateEl?.value || "").trim();
-  const tema  = (temaEl?.value || "").trim();
-
-  if(msgEl) msgEl.innerHTML = "";
-
-  if(!fechaRaw){
-    if(msgEl) msgEl.innerHTML = `<span class="warn">Debes seleccionar una fecha.</span>`;
-    return;
-  }
-
-  // ✅ NORMALIZAR A ISO
-  const fechaISO = parseDateToISO(fechaRaw);
-
-  if(!fechaISO){
-    if(msgEl) msgEl.innerHTML = `<span class="err">Fecha inválida.</span>`;
-    return;
-  }
-
-  try{
-    setStatus("Validando fechas actuales...");
-
-    // 1) traer fechas existentes
-    const { data: existing, error: e1 } = await sb
-      .from("session_dates")
-      .select("fecha")
-      .eq("session_id", session_id);
-
-    if(e1) throw e1;
-
-    // 2) normalizar existentes
-    const set = new Set(
-      (existing || []).map(r => String(r.fecha).slice(0,10))
-    );
 
     // 3) validar duplicado REAL
     if(set.has(fechaISO)){
@@ -1520,7 +1481,7 @@ window.adminAddDay = async (session_id) => {
       tema_visto: tema || null
     };
 
-    const { error: e2 } = await sb
+    
       .from("session_dates")
       .insert([payload]);
 
@@ -2107,28 +2068,27 @@ async function adminUploadCertifications(){
     }
 
     if(!payload.length) throw new Error("Ningún documento encontrado en employees.");
+// 🔎 DEBUG: revisar qué fechas van a Supabase
+setLog({
+  ejemplo_primera_fila: payload[0],
+  total_payload: payload.length,
+  noFound: noFound.length
+});
 
-    const { error: e2 } = await sb
-      .from("employee_certifications")
-      .upsert(payload,{ onConflict:"employee_id,certificacion" });
+// ✅ GUARDAR EN SUPABASE
+let r = await sb
+  .from("employee_certifications")
+  .upsert(payload, {
+    onConflict: "employee_id,certificacion"
+  });
 
-    if(e2) throw e2;
-
- msg.innerHTML = `<span class="ok">Listo.</span> ${payload.length} cargadas.`;
-
-if(noFound.length){
-  const uniq = [...new Set(noFound)];
-
-  msg.innerHTML += `<br/><span class="warn">No encontrados en employees:</span> ${uniq.length}`;
-
-  // descarga automática (completo)
-  const csv = "documento\n" + uniq.join("\n");
-  downloadTextFile(
-    csv,
-    "no_encontrados_employees_certificaciones.csv",
-    "text/csv;charset=utf-8"
-  );
+if (r.error && String(r.error.message || "").toLowerCase().includes("on conflict")) {
+  r = await sb
+    .from("employee_certifications")
+    .insert(payload);
 }
+
+if (r.error) throw r.error;
 
     setLog({ cert_upload: { ok: payload.length, noFound: noFound.length } });
 
@@ -3100,6 +3060,7 @@ if(wdDate && String(f) >= String(wdDate)){
 
 </body>
 </html>
+
 
 
 
