@@ -2180,7 +2180,8 @@ async function trainerLoadTopicsForModule(session_id, module_code){
   const selDate  = box.querySelector(".dateSelect");
   if(!selTopic || !selDate) return;
 
-  selTopic.innerHTML = `<option value="">-- Selecciona tema --</option>`;
+ selTopic.innerHTML = "";
+
   selTopic.disabled = true;
 
   if(!module_code) return;
@@ -2396,19 +2397,24 @@ async function trainerLoadSessions(){
   <option value="">-- Selecciona módulo --</option>
 </select>
 
-<label>Tema (para esta fecha)</label>
-<select class="topicSelect" disabled>
-  <option value="">-- Selecciona tema --</option>
-</select>
+<label>Tema (para esta fecha) — puedes seleccionar varios (Ctrl + click)</label>
+<select class="topicSelect" multiple size="6" disabled></select>
+
+<div class="small" style="margin-top:6px;opacity:.9;">
+  Para seleccionar varios: mantén presionado <b>Ctrl</b> y haz clic en cada tema.
+</div>
+
 
 <button class="btnMini btnGhost" type="button"
   onclick="trainerSaveTema('${s.id}')">
   Guardar tema
 </button>
 
+
 <div class="small" style="margin-top:6px;opacity:.9;">
-  (Se guarda en <code>session_dates</code> por día)
+  (Se guarda en <code>session_dates</code> solo para la fecha seleccionada)
 </div>
+
 
           <div class="actions" style="margin-top:10px;">
             <button class="btnMini btnGhost" type="button"
@@ -2471,21 +2477,20 @@ window.trainerSaveTema = async (session_id) => {
   const selTopic = box.querySelector(".topicSelect");
 
   const module_code = selMod?.value || "";
-  const topic_id = selTopic?.value || "";
-  const topic_label = selTopic?.selectedOptions?.[0]?.textContent || "";
+ const selected = Array.from(selTopic?.selectedOptions || []);
+const topic_ids = selected.map(o => o.value).filter(Boolean);
+const topic_labels = selected.map(o => (o.textContent || "").trim()).filter(Boolean);
 
-  if(!session_date_id){
-    alert("Selecciona una fecha (día) primero.");
-    return;
-  }
+if(topic_ids.length === 0){
+  alert("Selecciona al menos 1 tema.");
+  return;
+}
+
   if(!module_code){
     alert("Selecciona el módulo.");
     return;
   }
-  if(!topic_id){
-    alert("Selecciona el tema.");
-    return;
-  }
+ 
 
   try{
     setStatus("Guardando tema del día...");
@@ -2493,9 +2498,13 @@ window.trainerSaveTema = async (session_id) => {
     const { error } = await sb
       .from("session_dates")
       .update({
-        topic_id,
-        tema_visto: topic_label || null
-      })
+  // Guardamos el texto con TODOS los temas seleccionados
+  tema_visto: topic_labels.join(" | "),
+
+  // Y en topic_id dejamos el primero (solo para no romper tu lógica actual)
+  topic_id: topic_ids[0]
+})
+
       .eq("id", session_date_id);
 
     if(error) throw error;
@@ -2512,8 +2521,7 @@ window.trainerSaveTema = async (session_id) => {
     alert("No se pudo guardar el tema.");
   }
 };
-
-  
+ 
 
 async function trainerLoadDatesInto(session_id){
   const sb = getSB();
@@ -3249,6 +3257,7 @@ if(wdDate && String(f) >= String(wdDate)){
 
 </body>
 </html>
+
 
 
 
