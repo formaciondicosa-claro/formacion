@@ -2155,20 +2155,30 @@ async function trainerLoadModulesInto(session_id){
   const { data, error } = await sb
     .from("training_topics")
     .select("module_code, module_name")
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .order("module_code", { ascending: true });
+
 
   if(error){ console.error(error); return; }
 
-  const seen = new Set();
+   const seen = new Set();
   for(const r of (data||[])){
-    if(seen.has(r.module_code)) continue;
-    seen.add(r.module_code);
+    // ✅ normalizar clave para evitar duplicados por espacios/mayúsculas
+    const codeRaw = (r.module_code ?? "").toString();
+    const codeKey = codeRaw.trim().toUpperCase();
+    if(!codeKey) continue;
+
+    if(seen.has(codeKey)) continue;
+    seen.add(codeKey);
 
     const opt = document.createElement("option");
-    opt.value = r.module_code;
-    opt.textContent = r.module_name;
+    // ✅ guardamos el código limpio (sin espacios)
+    opt.value = codeRaw.trim();
+    // ✅ nombre del módulo (si viene vacío, mostramos el código)
+    opt.textContent = (r.module_name ?? "").toString().trim() || codeRaw.trim();
     selMod.appendChild(opt);
   }
+
 }
 
 async function trainerLoadTopicsForModule(session_id, module_code){
@@ -3257,6 +3267,7 @@ if(wdDate && String(f) >= String(wdDate)){
 
 </body>
 </html>
+
 
 
 
