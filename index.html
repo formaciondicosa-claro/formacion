@@ -1403,7 +1403,12 @@ async function adminSaveSessionDates(){
     let r = await sb.from("session_dates").delete().eq("session_id", session_id);
     if(r.error) throw r.error;
 
-    const payload = fechas.map(f => ({ session_id, fecha: f }));
+    const payload = fechas.map((f, i) => ({
+  session_id,
+  fecha: f,
+  day_number: i + 1   // ✅ día 1,2,3...
+}));
+
     r = await sb.from("session_dates").insert(payload);
     if(r.error) throw r.error;
 
@@ -2137,6 +2142,91 @@ function setLate(session_id, employee_id, session_date, val){
   if(val) localStorage.setItem(lateKey(session_id, employee_id, session_date), "1");
   else localStorage.removeItem(lateKey(session_id, employee_id, session_date));
 }
+async function trainerLoadModulesInto(session_id){
+  const sb = getSB();
+  const box = document.querySelector(`#sess_${CSS.escape(session_id)}`);
+  if(!box) return;
+
+  const selMod = box.querySelector(".modSelect");
+  if(!selMod) return;
+
+  selMod.innerHTML = `<option value="">-- Selecciona módulo --</option>`;
+
+  const { data, error } = await sb
+    .from("training_topics")
+    .select("module_code, module_name")
+    .eq("is_active", true);
+
+  if(error){ console.error(error); return; }
+
+  const seen = new Set();
+  for(const r of (data||[])){
+    if(seen.has(r.module_code)) continue;
+    seen.add(r.module_code);
+
+    const opt = document.createElement("option");
+    opt.value = r.module_code;
+    opt.textContent = r.module_name;
+    selMod.appendChild(opt);
+  }
+}
+
+async function trainerLoadTopicsForModule(session_id, module_code){
+  const sb = getSB();
+  const box = document.querySelector(`#sess_${CSS.escape(session_id)}`);
+  if(!box) return;
+
+  const selTopic = box.querySelector(".topicSelect");
+  const selDate  = box.querySelector(".dateSelect");
+  if(!selTopic || !selDate) return;
+
+  selTopic.innerHTML = `<option value="">-- Selecciona tema --</option>`;
+  selTopic.disabled = true;
+
+  if(!module_code) return;
+
+  const session_date_id = selDate.value;
+  if(!session_date_id){
+    selTopic.innerHTML = `<option value="">(Selecciona primero la fecha)</option>`;
+    return;
+  }
+
+  // 1) saber qué "día número" es esa fecha
+  const { data: sd, error: e0 } = await sb
+    .from("session_dates")
+    .select("day_number")
+    .eq("id", session_date_id)
+    .maybeSingle();
+
+  if(e0) { console.error(e0); return; }
+
+  const dayNum = Number(sd?.day_number || 0);
+  if(!dayNum){
+    selTopic.innerHTML = `<option value="">(Esta fecha no tiene day_number)</option>`;
+    return;
+  }
+
+  // 2) traer SOLO temas del módulo + ese día
+  const { data, error } = await sb
+    .from("training_topics")
+    .select("id, topic_label, day_number")
+    .eq("is_active", true)
+    .eq("module_code", module_code)
+    .eq("day_number", dayNum)
+    .order("topic_label", { ascending: true });
+
+  if(error){ console.error(error); return; }
+
+  for(const t of (data||[])){
+    const opt = document.createElement("option");
+    opt.value = t.id;
+    opt.textContent = t.topic_label;
+    selTopic.appendChild(opt);
+  }
+
+  selTopic.disabled = false;
+}
+
 
 function wireTrainerHandlers(){
   $("btnRefreshTrainer").onclick = trainerInit;
@@ -2301,13 +2391,24 @@ async function trainerLoadSessions(){
 
           <hr/>
 
-          <label>Tema dictado (para esta fecha)</label>
-          <input class="temaInput" placeholder="Ej: Ascenso Técnico" />
+          <label>Módulo (para esta fecha)</label>
+<select class="modSelect">
+  <option value="">-- Selecciona módulo --</option>
+</select>
 
-          <button class="btnMini btnGhost" type="button"
-            onclick="trainerSaveTema('${s.id}')">
-            Guardar tema
-          </button>
+<label>Tema (para esta fecha)</label>
+<select class="topicSelect" disabled>
+  <option value="">-- Selecciona tema --</option>
+</select>
+
+<button class="btnMini btnGhost" type="button"
+  onclick="trainerSaveTema('${s.id}')">
+  Guardar tema
+</button>
+
+<div class="small" style="margin-top:6px;opacity:.9;">
+  (Se guarda en <code>session_dates</code> por día)
+</div>
 
           <div class="actions" style="margin-top:10px;">
             <button class="btnMini btnGhost" type="button"
@@ -2326,9 +2427,21 @@ async function trainerLoadSessions(){
     }).join("");
 
     for(const s of sessions){
-      await trainerLoadDatesInto(s.id);
-      await trainerLoadCitadosInto(s.id);
-    }
+  await trainerLoadDatesInto(s.id);
+
+  // ✅ cargar módulos al entrar
+  await trainerLoadModulesInto(s.id);
+
+  // ✅ cuando cambie módulo -> cargar temas
+  const box = document.querySelector(`#sess_${CSS.escape(s.id)}`);
+  const selMod = box?.querySelector(".modSelect");
+  if(selMod){
+    selMod.onchange = () => trainerLoadTopicsForModule(s.id, selMod.value);
+  }
+
+  await trainerLoadCitadosInto(s.id);
+}
+
 
     setStatus(`<span class="ok">Sesiones cargadas.</span>`);
     setLog({ trainer_sessions: sessions });
@@ -2351,49 +2464,56 @@ window.trainerSaveTema = async (session_id) => {
   const box = document.querySelector(`#sess_${session_id}`);
   if(!box) return;
 
-  const fecha = box.querySelector(".dateSelect")?.selectedOptions?.[0]?.textContent;
-  const tema = box.querySelector(".temaInput")?.value?.trim();
+  const selDate = box.querySelector(".dateSelect");
+  const session_date_id = selDate?.value || null;
 
-  if(!fecha){
-    alert("Selecciona una fecha");
+  const selMod = box.querySelector(".modSelect");
+  const selTopic = box.querySelector(".topicSelect");
+
+  const module_code = selMod?.value || "";
+  const topic_id = selTopic?.value || "";
+  const topic_label = selTopic?.selectedOptions?.[0]?.textContent || "";
+
+  if(!session_date_id){
+    alert("Selecciona una fecha (día) primero.");
     return;
   }
-  if(!tema){
-    alert("Escribe el tema dictado");
+  if(!module_code){
+    alert("Selecciona el módulo.");
     return;
   }
-
-  const { data: cit } = await sb
-    .from("citations")
-    .select("employee_id")
-    .eq("session_id", session_id);
-
-  if(!cit?.length){
-    alert("No hay citados");
-    return;
-  }
-
-  const payload = cit.map(c => ({
-    session_id,
-    employee_id: c.employee_id,
-    session_date: fecha,
-    tema
-  }));
-
-  const { error } = await sb
-    .from("attendance_dates")
-    .upsert(payload, {
-      onConflict: "session_id,employee_id,session_date"
-    });
-
-  if(error){
-    alert("Error guardando tema");
-    console.error(error);
+  if(!topic_id){
+    alert("Selecciona el tema.");
     return;
   }
 
-  alert("Tema guardado");
+  try{
+    setStatus("Guardando tema del día...");
+
+    const { error } = await sb
+      .from("session_dates")
+      .update({
+        topic_id,
+        tema_visto: topic_label || null
+      })
+      .eq("id", session_date_id);
+
+    if(error) throw error;
+
+    setStatus(`<span class="ok">Tema guardado para el día.</span>`);
+    alert("Tema guardado ✅");
+
+    // refresca para que se vea (si luego quieres mostrarlo)
+    await trainerLoadCitadosInto(session_id);
+
+  }catch(e){
+    console.error(e);
+    setStatus(`<span class="err">Error guardando tema:</span> ${esc(e.message || e)}`);
+    alert("No se pudo guardar el tema.");
+  }
 };
+
+  
 
 async function trainerLoadDatesInto(session_id){
   const sb = getSB();
@@ -2419,7 +2539,17 @@ async function trainerLoadDatesInto(session_id){
     sel.innerHTML = dates.map(d => `<option value="${esc(d.id)}">${esc(d.fecha)}</option>`).join("");
     if(prev && dates.some(d => d.id === prev)) sel.value = prev;
 
-    sel.onchange = () => trainerLoadCitadosInto(session_id);
+    sel.onchange = async () => {
+  await trainerLoadCitadosInto(session_id);
+
+  // si ya hay módulo seleccionado, recargar temas para ese día
+  const box = document.querySelector(`#sess_${CSS.escape(session_id)}`);
+  const selMod = box?.querySelector(".modSelect");
+  if(selMod?.value){
+    await trainerLoadTopicsForModule(session_id, selMod.value);
+  }
+};
+
 
   }catch(e){
     sel.innerHTML = `<option value="">(Error cargando fechas)</option>`;
@@ -2449,6 +2579,31 @@ async function trainerLoadCitadosInto(session_id){
     );
     return;
   }
+// ✅ cargar tema guardado del día desde session_dates
+const box = document.querySelector(`#sess_${CSS.escape(session_id)}`);
+const selMod = box?.querySelector(".modSelect");
+const selTopic = box?.querySelector(".topicSelect");
+
+const { data: sdRow, error: sdErr } = await sb
+  .from("session_dates")
+  .select("topic_id, tema_visto")
+  .eq("id", session_date_id)
+  .maybeSingle();
+
+if(!sdErr && sdRow?.topic_id){
+  // cargar temas del módulo correcto (necesitamos saber el módulo del topic)
+  const { data: tt, error: ttErr } = await sb
+    .from("training_topics")
+    .select("id, module_code")
+    .eq("id", sdRow.topic_id)
+    .maybeSingle();
+
+  if(!ttErr && tt?.module_code){
+    if(selMod) selMod.value = tt.module_code;
+    await trainerLoadTopicsForModule(session_id, tt.module_code);
+    if(selTopic) selTopic.value = sdRow.topic_id;
+  }
+}
 
   try{
     // 1) Citados
@@ -2516,12 +2671,7 @@ const wdMap = new Map((wds || []).map(x => [x.employee_id, x.retiro_date]));
 
     const attMap = new Map((at || []).map(a => [a.employee_id, { asistio: a.asistio, tarde: a.tarde }]));
 
-    // ✅ Cargar tema guardado (si existe) para esta fecha
-    const temaInput = sessBox.querySelector(".temaInput");
-    const t = (at || []).find(x => (x.tema || "").trim() !== "")?.tema;
-    if(temaInput){
-      temaInput.value = t ? t : "";
-    }
+    
 
     // 3) Incapacidades para la fecha seleccionada
     const { data: incRows, error: eInc } = await sb
@@ -2923,7 +3073,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // refrescar panel + selector de sesiones (para que todo muestre lo nuevo)
 await adminLoadSessions();
 await adminLoadSessionSelects();
-    await adminLoadSessionSelects();
+
   }catch(e){
     setStatus(`<span class="err">Error:</span> ${esc(e.message || e)}`);
     setLog(e);
@@ -3000,21 +3150,35 @@ if(eX) throw eX;
 const exitMap = new Map((exs || []).map(x => [x.employee_id, x.exit_date]));
 
 
-    // 4) Asistencias de todas las fechas (y tema)
-    const { data: atAll, error: e3 } = await sb
-      .from("attendance_dates")
-      .select("employee_id, session_date, asistio, tema")
-      .eq("session_id", session_id)
-      .in("session_date", allFechas)
-      .in("employee_id", empIds);
-    if(e3) throw e3;
+   // 4) Asistencias de todas las fechas (SOLO asistio)
+const { data: atAll, error: e3 } = await sb
+  .from("attendance_dates")
+  .select("employee_id, session_date, asistio")
+  .eq("session_id", session_id)
+  .in("session_date", allFechas)
+  .in("employee_id", empIds);
+if(e3) throw e3;
 
-    // index: employee_id|fecha -> {asistio, tema}
-    const mapAtt = new Map();
-    for(const r of (atAll || [])){
-      const k = `${r.employee_id}|${r.session_date}`;
-      mapAtt.set(k, { asistio: r.asistio, tema: r.tema || "" });
-    }
+// index: employee_id|fecha -> asistio
+const mapAtt = new Map();
+for(const r of (atAll || [])){
+  const k = `${r.employee_id}|${r.session_date}`;
+  mapAtt.set(k, { asistio: r.asistio });
+}
+
+// 4B) Temas del día desde session_dates (tema_visto por fecha)
+const { data: sdTopics, error: eT } = await sb
+  .from("session_dates")
+  .select("fecha, tema_visto")
+  .eq("session_id", session_id)
+  .in("fecha", allFechas);
+
+if(eT) throw eT;
+
+// Map: fecha (YYYY-MM-DD) -> tema_visto
+const temaPorFecha = new Map(
+  (sdTopics || []).map(r => [String(r.fecha).slice(0,10), (r.tema_visto || "")])
+);
 
     // CSV
     const headers = [
@@ -3049,7 +3213,8 @@ if(wdDate && String(f) >= String(wdDate)){
         const asistio = (att?.asistio === true) ? "SI" : (att?.asistio === false ? "NO" : "");
 
         // tema: si está en ese registro; si no, vacío
-        const tema = (att?.tema ?? "").toString().replaceAll('"','""');
+        const tema = (temaPorFecha.get(String(f).slice(0,10)) || "").toString().replaceAll('"','""');
+
 
         const row = [
           session_id,
@@ -3084,6 +3249,7 @@ if(wdDate && String(f) >= String(wdDate)){
 
 </body>
 </html>
+
 
 
 
