@@ -2128,7 +2128,62 @@ if (r.error) throw r.error;
     $("btnCertUpload").textContent = "Cargar certificaciones";
   }
 }
+async function getTemaForSelectedDate(session_id){
+  const sb = getSB();
+  const box = document.querySelector(`#sess_${CSS.escape(session_id)}`);
+  const selDate = box?.querySelector(".dateSelect");
+  const session_date_id = selDate?.value || null;
+  if(!session_date_id) return { ok:false, tema:"", session_date_id:null };
 
+  const { data, error } = await sb
+    .from("session_dates")
+    .select("tema_visto")
+    .eq("id", session_date_id)
+    .maybeSingle();
+
+  if(error) return { ok:false, tema:"", session_date_id };
+
+  const tema = (data?.tema_visto || "").trim();
+  return { ok: !!tema, tema, session_date_id };
+}
+
+function setTrainerLockedUI(session_id, locked, temaText=""){
+  const box = document.querySelector(`#sess_${CSS.escape(session_id)}`);
+  if(!box) return;
+
+  // 1) mensaje arriba del bloque
+  let warn = box.querySelector(".temaWarn");
+  if(!warn){
+    warn = document.createElement("div");
+    warn.className = "small temaWarn";
+    warn.style.marginTop = "8px";
+    warn.style.padding = "10px";
+    warn.style.border = "1px solid rgba(250,204,21,.35)";
+    warn.style.borderRadius = "12px";
+    warn.style.background = "rgba(250,204,21,.08)";
+    box.insertBefore(warn, box.querySelector(".tablelike"));
+  }
+
+  if(locked){
+    warn.innerHTML = `⚠️ <b>Bloqueado:</b> primero debes <b>guardar el tema</b> para esta fecha.`;
+  }else{
+    warn.innerHTML = `✅ <b>Tema guardado:</b> ${esc(temaText)}`;
+    warn.style.borderColor = "rgba(52,211,153,.35)";
+    warn.style.background = "rgba(52,211,153,.08)";
+  }
+
+  // 2) deshabilitar botones sensibles dentro de la sesión
+ const sensitive = box.querySelectorAll(
+  `button[onclick*="trainerMark("],
+   button[onclick*="trainerHandOver("],
+   button[onclick*="trainerUndoHandOver("],
+   button[onclick*="trainerWithdraw("],
+   button[onclick*="trainerUndoWithdraw("],
+   button[onclick*="trainerExportSessionCSV("]`
+);
+
+  sensitive.forEach(btn => btn.disabled = !!locked);
+}
 /* =========================================================
    FORMADOR (TU BLOQUE TAL COMO LO TRAÍAS)
 ========================================================= */
@@ -2202,30 +2257,13 @@ async function trainerLoadTopicsForModule(session_id, module_code){
     return;
   }
 
-  // 1) saber qué "día número" es esa fecha
-  const { data: sd, error: e0 } = await sb
-    .from("session_dates")
-    .select("day_number")
-    .eq("id", session_date_id)
-    .maybeSingle();
-
-  if(e0) { console.error(e0); return; }
-
-  const dayNum = Number(sd?.day_number || 0);
-  if(!dayNum){
-    selTopic.innerHTML = `<option value="">(Esta fecha no tiene day_number)</option>`;
-    return;
-  }
-
-  // 2) traer SOLO temas del módulo + ese día
- const { data, error } = await sb
-  .from("training_topics")
-  .select("id, topic_label, day_number")
-  .eq("is_active", true)
-  .eq("module_code", module_code)
-  .or(`day_number.eq.${dayNum},day_number.eq.0`)
-  .order("topic_label", { ascending: true });
-
+   // ✅ TEMARIO LIBRE: NO depende del day_number
+  const { data, error } = await sb
+    .from("training_topics")
+    .select("id, topic_label")
+    .eq("is_active", true)
+    .eq("module_code", module_code)
+    .order("topic_label", { ascending: true });
 
   if(error){ console.error(error); return; }
 
@@ -2521,6 +2559,9 @@ if(topic_ids.length === 0){
     if(error) throw error;
 
     setStatus(`<span class="ok">Tema guardado para el día.</span>`);
+        // ✅ desbloquear inmediatamente
+    const temaInfo2 = await getTemaForSelectedDate(session_id);
+    setTrainerLockedUI(session_id, !temaInfo2.ok, temaInfo2.tema || "");
     alert("Tema guardado ✅");
 
     // refresca para que se vea (si luego quieres mostrarlo)
@@ -2597,6 +2638,28 @@ async function trainerLoadCitadosInto(session_id){
       `<div class="tr"><div class="small"><span class="warn">Selecciona una fecha.</span></div><div></div><div></div><div></div></div>`
     );
     return;
+  }
+    // ✅ BLOQUEO: si no hay tema guardado, no se puede hacer nada
+  const temaInfo = await getTemaForSelectedDate(session_id);
+  if(!temaInfo.ok){
+    setTrainerLockedUI(session_id, true);
+
+    // mostramos tabla vacía con aviso
+    table.insertAdjacentHTML("beforeend", `
+      <div class="tr">
+        <div class="small">
+          <span class="warn"><b>Debes guardar el tema del día</b></span>
+          <div class="small" style="opacity:.9;margin-top:6px;">
+            1) Selecciona módulo → 2) Selecciona tema(s) → 3) Clic en <b>Guardar tema</b>
+          </div>
+        </div>
+        <div></div><div></div><div></div>
+      </div>
+    `);
+
+    return; // 🔒 No pinta citados, no habilita botones
+  }else{
+    setTrainerLockedUI(session_id, false, temaInfo.tema);
   }
 // ✅ cargar tema guardado del día desde session_dates
 const box = document.querySelector(`#sess_${CSS.escape(session_id)}`);
@@ -2878,7 +2941,13 @@ window.trainerMark = async (session_id, employee_id, session_date, asistio, tard
     setLog({ error: "session_date vacío", session_id, employee_id, session_date, asistio, tarde });
     return;
   }
-
+ 
+  const temaInfo = await getTemaForSelectedDate(session_id);
+  if(!temaInfo.ok){
+    setStatus(`<span class="warn">Primero guarda el tema del día para poder marcar asistencia.</span>`);
+    alert("Primero guarda el tema del día (módulo + tema) ✅");
+    return;
+  }
   try{
    const payload = {
   session_id,
@@ -3103,7 +3172,19 @@ window.trainerExportSessionCSV = async (session_id) => {
   const sb = getSB();
   session_id = (session_id ?? "").toString().trim();
   if(!session_id) return alert("session_id vacío");
+  
+  const { data: missing, error: eM } = await sb
+    .from("session_dates")
+    .select("fecha, tema_visto")
+    .eq("session_id", session_id);
 
+  if(eM) throw eM;
+
+  const faltan = (missing || []).filter(r => !String(r.tema_visto || "").trim()).map(r => r.fecha);
+  if(faltan.length){
+    alert("No puedes exportar: faltan temas en estas fechas:\n\n- " + faltan.join("\n- "));
+    return;
+  }
   try{
     setStatus("Preparando exportación...");
 
@@ -3268,6 +3349,7 @@ if(wdDate && String(f) >= String(wdDate)){
 
 </body>
 </html>
+
 
 
 
