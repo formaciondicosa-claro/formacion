@@ -2151,7 +2151,6 @@ function setTrainerLockedUI(session_id, locked, temaText=""){
   const box = document.querySelector(`#sess_${CSS.escape(session_id)}`);
   if(!box) return;
 
-  // 1) mensaje arriba del bloque
   let warn = box.querySelector(".temaWarn");
   if(!warn){
     warn = document.createElement("div");
@@ -2165,24 +2164,14 @@ function setTrainerLockedUI(session_id, locked, temaText=""){
   }
 
   if(locked){
-    warn.innerHTML = `⚠️ <b>Bloqueado:</b> primero debes <b>guardar el tema</b> para esta fecha.`;
+    warn.innerHTML = `⚠️ <b>Debes guardar el tema del día</b> antes de marcar asistencia o exportar.`;
+    warn.style.borderColor = "rgba(250,204,21,.35)";
+    warn.style.background = "rgba(250,204,21,.08)";
   }else{
     warn.innerHTML = `✅ <b>Tema guardado:</b> ${esc(temaText)}`;
     warn.style.borderColor = "rgba(52,211,153,.35)";
     warn.style.background = "rgba(52,211,153,.08)";
   }
-
-  // 2) deshabilitar botones sensibles dentro de la sesión
- const sensitive = box.querySelectorAll(
-  `button[onclick*="trainerMark("],
-   button[onclick*="trainerHandOver("],
-   button[onclick*="trainerUndoHandOver("],
-   button[onclick*="trainerWithdraw("],
-   button[onclick*="trainerUndoWithdraw("],
-   button[onclick*="trainerExportSessionCSV("]`
-);
-
-  sensitive.forEach(btn => btn.disabled = !!locked);
 }
 /* =========================================================
    FORMADOR (TU BLOQUE TAL COMO LO TRAÍAS)
@@ -2640,10 +2629,8 @@ async function trainerLoadCitadosInto(session_id){
     return;
   }
     // ✅ BLOQUEO: si no hay tema guardado, no se puede hacer nada
-  const temaInfo = await getTemaForSelectedDate(session_id);
+    const temaInfo = await getTemaForSelectedDate(session_id);
   if(!temaInfo.ok){
-    setTrainerLockedUI(session_id, true);
-
     // mostramos tabla vacía con aviso
     table.insertAdjacentHTML("beforeend", `
       <div class="tr">
@@ -2657,9 +2644,9 @@ async function trainerLoadCitadosInto(session_id){
       </div>
     `);
 
-    return; // 🔒 No pinta citados, no habilita botones
-  }else{
-    setTrainerLockedUI(session_id, false, temaInfo.tema);
+    // 🔒 AHORA sí bloqueamos después de pintar el aviso
+    setTrainerLockedUI(session_id, true);
+    return;
   }
 // ✅ cargar tema guardado del día desde session_dates
 const box = document.querySelector(`#sess_${CSS.escape(session_id)}`);
@@ -2704,6 +2691,7 @@ if(!sdErr && sdRow?.topic_id){
       <div></div><div></div><div></div>
     </div>
   `);
+  setTrainerLockedUI(session_id, false, temaInfo.tema);
   return;
 }
     // ===============================
@@ -2906,7 +2894,7 @@ const yaRetiradoHoy = wdDate && String(fechaSeleccionada) >= String(wdDate);
 `);
 
 }
-
+setTrainerLockedUI(session_id, false, temaInfo.tema);
   }catch(err){
     table.insertAdjacentHTML("beforeend", `
       <div class="tr">
@@ -3349,6 +3337,7 @@ if(wdDate && String(f) >= String(wdDate)){
 
 </body>
 </html>
+
 
 
 
