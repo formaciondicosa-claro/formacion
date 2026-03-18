@@ -1306,13 +1306,16 @@ async function buscarHistorialColaborador(){
     // ✅ Traemos también formador_user_id para poder mostrar nombre del formador
     const { data, error } = await sb
       .from("attendance_dates")
-      .select(`
-        session_id,
-        session_date,
-        asistio,
-        estado,
-        sessions(ciudad, formador_user_id, trainings(nombre))
-      `)
+     .select(`
+  session_id,
+  session_date,
+  asistio,
+  sessions!attendance_dates_session_id_fkey (
+    ciudad,
+    formador_user_id,
+    trainings ( nombre )
+  )
+`)
       .eq("employee_id", employee_id)
       .order("session_date", { ascending:false })
       .limit(800);
@@ -1637,28 +1640,3 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
