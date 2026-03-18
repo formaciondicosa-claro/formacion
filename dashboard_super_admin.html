@@ -844,11 +844,23 @@ async function loadSessionDates(session_id){
 
 async function loadCitations(session_id){
   const sb = getSB();
+
   const { data, error } = await sb
     .from("citations")
-    .select("employee_id, employees(documento,nombre,cargo,area,estado)")
+    .select(`
+      employee_id,
+      employees!citations_employee_id_fkey (
+        documento,
+        nombre,
+        cargo,
+        area,
+        estado
+      )
+    `)
     .eq("session_id", session_id);
+
   if(error) throw error;
+
   STATE.citations = data || [];
 }
 
