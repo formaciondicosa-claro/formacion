@@ -877,8 +877,8 @@ async function loadAttendanceForAllDates(session_id){
   // 1) ASISTENCIA (solo citados)
   if(empIds.length){
     const { data: asisRows, error: e1 } = await sb
-     .from("attendance_dates")
-.select("session_date, employee_id, asistio, estado")
+    .from("attendance_dates")
+.select("session_date, employee_id, asistio")
 .eq("session_id", session_id)
 .in("session_date", fechas)
       .in("employee_id", empIds);
@@ -890,7 +890,7 @@ async function loadAttendanceForAllDates(session_id){
       if(!STATE.attendanceByDate.has(f)) STATE.attendanceByDate.set(f, new Map());
       STATE.attendanceByDate.get(f).set(row.employee_id, {
         asistio: row.asistio,
-        estado: row.estado || null
+       estado: null
       });
     }
   }
