@@ -1855,7 +1855,7 @@ window.adminAddCitation = async (employee_id) => {
   setStatus("Guardando citación...");
 
   try{
-    const payload = { session_id, employee_id, estado: "citada" };
+   const payload = { session_id, employee_id };
 
     let res = await sb.from("citations").upsert(payload, { onConflict: "session_id,employee_id" }).select("id,session_id,employee_id,estado").single();
     if(res.error && String(res.error.message||"").toLowerCase().includes("on conflict")){
@@ -3337,20 +3337,3 @@ if(wdDate && String(f) >= String(wdDate)){
 
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
