@@ -2678,7 +2678,10 @@ if(!sdErr && sdRow?.topic_id){
     // 1) Citados
     const { data: cit, error } = await sb
       .from("citations")
-      .select(`employee_id, employees ( id, documento, nombre )`)
+      .select(`
+  employee_id,
+  employees:employees!citations_employee_id_fkey ( id, documento, nombre )
+`)
       .eq("session_id", session_id)
       .order("created_at", { ascending:true });
 
